@@ -5,7 +5,45 @@ section; tick things off as they land.
 
 ## Bugs
 
-Fixed 2026-09-19, all three in `app.js`. Not yet deployed to bmo.
+### Round 2, found 2026-09-19 by audit — open
+
+- [ ] **Offline edits are never pushed back.** *The serious one.* `pull()` only
+      pushes when the server has **no** state at all (`s === null`). If the
+      server holds an *older* state, `adopt()` returns false, nothing is
+      pushed, and the status line says **"Synced"** — while the work sits on
+      one device. Proven by driving `app.js` under a DOM shim: server at
+      `savedAt: 1000`, local at `9000`, and the only request made is the GET.
+      Worse, it diverges silently: open the page on another device, it loads
+      the old server state, tick one thing, and that device now has the newest
+      `savedAt` — the offline work is gone.
+      Shipping the PWA is what made this reachable; before it, the page could
+      not load offline at all, so there were no offline edits to lose.
+      Fix: in `pull()`, push whenever `state.savedAt` is ahead of the server's,
+      and stop claiming "Synced" when it is.
+- [ ] **A long filename crashes the request.** `static_file` lets any bare name
+      through, so `GET /aaaa…400 chars….js` reaches `open()` and raises
+      `OSError: [Errno 36] File name too long`, which nothing catches: the
+      connection closes with no HTTP response at all, not even a 500.
+      Introduced by the `TYPES` change — the old fixed allowlist could never
+      reach `open()` with an arbitrary name. Catch `OSError`, not just
+      `FileNotFoundError` and `IsADirectoryError`.
+- [ ] **A non-numeric Content-Length crashes the request.** `int(...)` in
+      `do_PUT` raises `ValueError` and the client gets no reply. Pre-existing.
+      Should be a 400.
+- [ ] **A running block that is not `current` is listed under "Still to
+      come".** `later` is `b.e > now && b !== current`, so with two overlapping
+      blocks the one that did not win `currentBlock` shows as upcoming with a
+      start time in the past. Latent: a check of every week type found zero
+      overlaps in today's `schedule.js`, but trips are the designed overlap and
+      one long block plus anything else brings it out.
+- [ ] **`slots` accumulates orphans.** `normalize()` copies `slots` wholesale
+      and `rollWeek()` keeps it, so a slot key whose block was moved or deleted
+      in `schedule.js` stays in the state for good. Harmless but unbounded;
+      prune to the current block ids on load.
+
+### Round 1, fixed 2026-09-19
+
+All three in `app.js`. Deployed to bmo.
 
 - [x] **Stale Now card after unlocking the phone.** `visibilitychange` calls
       `pull()`, which only re-renders when the server has strictly newer state.
@@ -21,6 +59,21 @@ Fixed 2026-09-19, all three in `app.js`. Not yet deployed to bmo.
       `savedAt`, pushes to the server, and creates `state.json` on a page where
       nothing was ticked — which the docs say never happens. Only save on a
       real change.
+
+## Worth knowing (checked, not bugs)
+
+- `isoWeek()` is correct, including the year-boundary cases: verified against
+  16 known ISO-8601 dates and confirmed to roll only on Mondays across 400
+  consecutive days.
+- `schedule.js` is structurally clean: no reversed or zero-length blocks, none
+  outside the grid, no duplicate ids, no overlaps, no track without a meter.
+- **Normal weeks have exactly zero slack: 6 deep slots against 6 category
+  targets.** Every single slot has to be assigned correctly or the week cannot
+  add up. Exam weeks have 3 gym blocks for a target of 2, so those have one
+  spare. This is what makes the "close the loop" item below worth more than it
+  first looks.
+- The two `review` blocks are tickable but feed no meter. That reads as
+  deliberate — they are ticked, they just do not count.
 
 ## Next
 
