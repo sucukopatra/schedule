@@ -24,11 +24,13 @@ Fixed 2026-09-19, all three in `app.js`. Not yet deployed to bmo.
 
 ## Next
 
-- [ ] **PWA: manifest + service worker.** Home-screen icon, instant cold start,
-      and a page that still renders when bmo is unreachable — the localStorage
-      fallback exists but can never be reached, because without the network the
-      HTML does not load at all. Precache the page files, network-first on
-      `api/state`. Needs the `STATIC` change below first.
+- [x] **PWA: manifest + service worker.** Done 2026-09-19. `sw.js` precaches
+      the page files and serves network-first, so edit-and-reload still works;
+      `api/state` is left alone. Icons rendered from `icon.svg`. Needs an
+      install on the phone to be worth anything — *Add to home screen* once it
+      is deployed. **Not yet verified in a real browser:** registration,
+      offline start and the install prompt still need one pass through
+      devtools.
 - [ ] **Keep history.** `rollWeek()` wipes `done` and nothing survives, so the
       app cannot answer "did I hit gym 3× this month?". Append
       `{week, type, counts}` to a `history` array capped at ~26 weeks before
@@ -38,8 +40,10 @@ Fixed 2026-09-19, all three in `app.js`. Not yet deployed to bmo.
       but never connect that to the two unassigned slots sitting on Wednesday
       and Saturday. One line under the meters: "3 open sessions left · 2
       coursework, 1 software short." Maybe a "fill to targets" button.
-- [ ] **Notifications** ("Gym in 15 minutes"), once the PWA is installed — on
-      iOS it only works from an installed PWA, so it has to come second.
+- [ ] **Notifications** ("Gym in 15 minutes"), now that the PWA exists. Needs
+      the page installed on the phone first, and a decision about scheduling:
+      there is no server push here, so it is either a one-shot timer while the
+      page is open or the Notification Triggers API where it exists.
 
 ## Smaller
 
@@ -49,11 +53,11 @@ Fixed 2026-09-19, all three in `app.js`. Not yet deployed to bmo.
       with the buttons as a manual override.
 - [ ] **Tomorrow peek** at the bottom of Today. The Week grid is a desktop
       thing; at 22:30 you just want to know what the morning looks like.
-- [ ] **Generalise `STATIC` in `server.py`.** The allowlist buys nothing over
-      `basename` plus an extension check against a fixed directory, and costs a
-      container recreate and a confusing 404 every time a file is added —
-      a trap `DEPLOYMENT.md` spends a paragraph on. Removing it beats
-      documenting it.
+- [x] **Generalise `STATIC` in `server.py`.** Done 2026-09-19, as the
+      prerequisite for the PWA files. Now a `TYPES` extension map plus a bare-
+      filename check; traversal attempts and `/server.py` all 404. Deploying
+      this needs the container recreated, which `schedule-deploy` does by
+      itself because `server.py` changed.
 - [ ] **Validate `schedule.js` on load.** Nothing checks the hand-edited data:
       `at: '23:30-00:30'` gives `e < s` and a negative height, an unknown
       `track` silently never reaches a meter. A few `console.warn`s would catch
