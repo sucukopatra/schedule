@@ -119,13 +119,30 @@ button.row{cursor:pointer}
 .mcount{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
 .mnone{font-size:13px;color:var(--muted);margin-top:7px}
 
+/* ---------- the plan line ---------- */
+.plan{
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;
+  padding:13px 16px;background:var(--raised);border:1px solid var(--line);
+  border-radius:12px;margin:0 0 20px;
+}
+.meters + .plan{margin-top:-9px}
+.plan p{margin:0;flex:1 1 210px;font-size:14px;line-height:1.4}
+.plan b{font-stretch:92%}
+.plan button{
+  flex:0 0 auto;border:1px solid var(--ink);background:var(--ink);color:var(--bg);
+  border-radius:9px;padding:9px 14px;cursor:pointer;font-weight:700;font-stretch:90%;font-size:14px;
+}
+.plan.ok{background:transparent;border-style:dashed}
+.plan.ok p{color:var(--muted)}
+.plan.warn{border-color:var(--signal);box-shadow:inset 3px 0 0 var(--signal)}
+
 /* ---------- recent weeks ---------- */
 .history{
   padding:16px;background:var(--surface);border:1px solid var(--line);
   border-radius:12px;margin-bottom:20px;
 }
 .hrow{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-.hname{flex:0 0 auto;width:96px;font-size:13px;font-weight:700;font-stretch:88%;
+.hname{flex:0 0 auto;width:108px;font-size:13px;font-weight:700;font-stretch:88%;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hcells{flex:1 1 auto;display:flex;gap:3px;min-width:0}
 .hcell{flex:1 1 0;min-width:8px;max-width:48px;height:18px;border-radius:3px;border:2px solid var(--line);background:transparent}

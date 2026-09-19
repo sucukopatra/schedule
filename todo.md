@@ -114,10 +114,17 @@ the only thing that makes a check worth having.
       the same week over and over and kept its own private history. Caught by
       the new sync cases, not by eye.
       Checked at phone and desktop width, light and dark, both views.
-- [ ] **Close the loop on deep sessions.** The meters say "Coursework 1 of 3"
-      but never connect that to the two unassigned slots sitting on Wednesday
-      and Saturday. One line under the meters: "3 open sessions left · 2
-      coursework, 1 software short." Maybe a "fill to targets" button.
+- [x] **Close the loop on deep sessions.** Done 2026-09-20. A line under the
+      meters, in four states, plus a **Fill to targets** button that assigns
+      the open slots that have not passed yet — earliest slot to the first
+      meter on the page, working around whatever is already chosen, every slot
+      still tappable after.
+      The state worth having is the fourth: a slot whose time has passed while
+      still open cannot be filled, and with no slack anywhere that means the
+      week has already stopped adding up. The page now says so on Tuesday
+      instead of letting it be discovered on Sunday.
+      `tools/check-plan.js` pins every branch and both fill cases, including
+      that whatever the fill produces actually adds up.
 - [ ] **Notifications** ("Gym in 15 minutes"), now that the PWA exists. Needs
       the page installed on the phone first, and a decision about scheduling:
       there is no server push here, so it is either a one-shot timer while the

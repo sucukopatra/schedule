@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 /* Sync behaviour, checked by running the real app/web/app.js against a fake
-   server. app.js needs a DOM, but only barely: render() writes innerHTML and
-   then asks for elements, so stubs that answer "nothing" are enough to drive
-   the whole load -> pull -> push path.
+   server through tools/harness.js.
 
      node tools/check-sync.js             # exits 1 if any case is wrong
      node tools/check-sync.js other/web   # check a copy of web/ instead
@@ -13,11 +11,8 @@
    half of the contract: a page where nothing was ticked must never write a
    state.json. */
 'use strict';
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
-
-const WEB = process.argv[2] || path.join(__dirname, '..', 'app', 'web');
+const drive = require('./harness.js');
+const webDir = process.argv[2] || undefined;
 
 function isoWeekNow() {
   const d = new Date();
@@ -25,52 +20,6 @@ function isoWeekNow() {
   t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
   const jan1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
   return t.getUTCFullYear() + '-W' + String(Math.ceil(((t - jan1) / 86400000 + 1) / 7)).padStart(2, '0');
-}
-
-function drive({ serverState, localState }) {
-  const calls = [];
-  const store = {};
-  if (localState) store['ender-schedule'] = JSON.stringify(localState);
-
-  const stub = { set innerHTML(v) {}, get innerHTML() { return ''; },
-                 querySelector: () => null, querySelectorAll: () => [],
-                 textContent: '', addEventListener() {} };
-  const ctx = {
-    console, Date, JSON, Math, Object, Number, String, Array, Promise, Error, URL,
-    /* app.js debounces its push by 1.5 s. Fast-forward every timer it sets so
-       a debounced save still lands inside this harness's settle window --
-       otherwise a case that saves through save() rather than push() looks
-       like a case that never sends anything. */
-    setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms || 0, 5)),
-    clearTimeout, setInterval: () => 0,
-    localStorage: {
-      getItem: (k) => (k in store ? store[k] : null),
-      setItem: (k, v) => { store[k] = String(v); },
-    },
-    document: {
-      getElementById: (id) => (id === 'state'
-        ? { textContent: '{"v":2,"type":"normal","slots":{},"done":{}}' } : stub),
-      addEventListener() {},
-      visibilityState: 'visible',
-    },
-    fetch: (url, opts) => {
-      const method = (opts && opts.method) || 'GET';
-      calls.push({ url, method });
-      if (method === 'PUT') return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(null) });
-      if (serverState === null) return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve(null) });
-      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(serverState) });
-    },
-  };
-  ctx.window = ctx;
-  vm.createContext(ctx);
-  vm.runInContext(fs.readFileSync(path.join(WEB, 'schedule.js'), 'utf8'), ctx);
-  vm.runInContext(fs.readFileSync(path.join(WEB, 'app.js'), 'utf8'), ctx);
-
-  // Let the fetch promise chain settle.
-  return new Promise((res) => setTimeout(() => res({
-    put: calls.some((c) => c.method === 'PUT'),
-    stored: store['ender-schedule'] ? JSON.parse(store['ender-schedule']) : null,
-  }), 60));
 }
 
 const W = isoWeekNow();
@@ -148,7 +97,7 @@ CASES.push(
 (async () => {
   let bad = 0;
   for (const c of CASES) {
-    const got = await drive(c.state);
+    const got = await drive({ ...c.state, webDir });
     const fails = [];
     if (got.put !== c.put) fails.push(`PUT ${got.put ? 'was' : 'was not'} issued, expected ${c.put ? 'it' : 'none'}`);
     if ('savedAt' in c && (!got.stored || got.stored.savedAt !== c.savedAt)) {

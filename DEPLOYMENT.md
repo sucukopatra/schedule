@@ -134,9 +134,32 @@ registration just fails there and the page carries on with localStorage.
 ### Views
 
 - **Today** is the default, and the reason to open the page at all: a card for
-  what is running now with time remaining, what is next and in how long, then
-  the rest of today as a tap-to-tick list, then the week's counts.
+  what is running now with time remaining, what is next and in how long,
+  anything else still running, the rest of today as a tap-to-tick list, then
+  the week's counts, the plan line and recent weeks.
 - **Week** is the full seven-day grid, mainly useful on a desktop.
+
+Both views end with the counts, the plan line and the recent-weeks strip.
+
+### The plan line
+
+Every week type has exactly as many deep slots as it has category targets —
+six against six in a normal week — so there is no slack anywhere: one slot
+assigned to the wrong thing makes the week impossible, and nothing else on the
+page would tell you. The line under the meters is what closes that gap:
+
+- *5 open sessions left · still needs 2 Coursework, 2 Software project, 1 Chess
+  study.* — with a **Fill to targets** button, which assigns the open slots
+  that have not passed yet, earliest slot to the first meter on the page. It
+  works around whatever is already chosen and every slot stays tappable
+  afterwards, so it is a starting point rather than a decision.
+- *Every deep session is spoken for, and the targets add up.*
+- *Every session is assigned, but the week is still short 1 Chess study —
+  something else has one too many.*
+- *Nothing left to assign · still short …, and 4 sessions went by unassigned.*
+  A slot whose time has passed while still open cannot be filled, and with no
+  slack that means the week has already stopped adding up. Better said on
+  Tuesday than discovered on Sunday.
 
 The choice is remembered per device in localStorage, not synced.
 
@@ -328,6 +351,7 @@ each exits non-zero on a failure.
 ```bash
 node tools/check-schedule.js   # invariants for the hand-edited timetable
 node tools/check-sync.js       # load -> pull -> push, against a fake server
+node tools/check-plan.js       # the plan line and Fill to targets
 tools/check-server.sh          # the HTTP contract, on a throwaway DATA_DIR
 ```
 
@@ -341,10 +365,22 @@ tools/check-server.sh          # the HTTP contract, on a throwaway DATA_DIR
   DOM stub. It pins both halves of the contract: work done offline gets pushed
   once the server is back, and a page where nothing was ticked never writes a
   `state.json`.
+- **check-plan.js** pins each branch of the plan line and the fill: that the
+  result adds up, that it works around slots already chosen, and that it is the
+  same every time.
 - **check-server.sh** starts a real server on a free port and walks the HTTP
   contract, including the two requests that once got no reply at all — a
   filename too long for the filesystem, and a non-numeric `Content-Length` —
   and asserts the log holds no tracebacks.
+
+`check-sync.js` and `check-plan.js` share `tools/harness.js`, which runs the
+real `app.js` against a fake server and a DOM small enough to be honest about
+what it is: it parses the rendered HTML back into tags and hands out fakes that
+record their listeners, which is enough to render, read what was rendered, and
+click something. It is not a browser — no layout, no CSS, no bubbling — so it
+can tell you a handler did the right thing to the state, never that a button
+was reachable or legible. For that, render a state through the harness, drop
+the HTML next to the real `style.css`, and look at it.
 
 Both `.js` scripts take an optional path, so you can point them at a copy and
 confirm they still fail on a fault you introduce deliberately. That is worth

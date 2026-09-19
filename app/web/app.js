@@ -300,6 +300,62 @@
     return h + '</section>';
   }
 
+  /* Deep sessions are the only thing here you actually choose, and every week
+     type has exactly as many of them as it has targets -- there is no slack
+     anywhere. So the useful thing to say is not how many are done, which the
+     meters already show, but how many are still unspoken for and what they
+     have to become. A slot whose time has passed while still open cannot be
+     filled any more, which is worth saying out loud rather than leaving to be
+     discovered on Sunday. */
+  function plan() {
+    const d = new Date();
+    const di = dayIndex(d);
+    const now = d.getHours() * 60 + d.getMinutes();
+    const t = SCHEDULE.weeks[state.type].targets;
+    const c = counts();
+
+    const short = [];
+    Object.keys(CATS).forEach((k) => {
+      const n = (t[k] || 0) - c[k].planned;
+      if (n > 0) short.push({ key: k, label: CATS[k].label, n });
+    });
+
+    const deep = forWeek().filter((b) => b.kind === 'deep');
+    const open = deep.filter((b) => !state.slots[b.id]);
+    const gone = open.filter((b) => b.d < di || (b.d === di && b.e <= now));
+    return { deep, short, open, gone, ahead: open.filter((b) => gone.indexOf(b) < 0) };
+  }
+
+  function planHTML() {
+    const p = plan();
+    if (!p.deep.length) return '';
+    const n = p.ahead.length;
+    const sessions = `<b>${n} open session${n === 1 ? '' : 's'}</b>`;
+    const needs = p.short.map((x) => `${x.n} ${esc(x.label)}`).join(', ');
+    let cls = 'plan';
+    let text;
+    let button = '';
+
+    if (n && p.short.length) {
+      text = `${sessions} left · still needs ${needs}.`;
+      button = '<button type="button" data-fill>Fill to targets</button>';
+    } else if (n) {
+      cls += ' ok';
+      text = `${sessions} left, and every target is already met. Anything goes.`;
+    } else if (p.short.length && p.gone.length) {
+      cls += ' warn';
+      const g = p.gone.length;
+      text = `Nothing left to assign · still short ${needs}, and ${g} session${g === 1 ? '' : 's'} went by unassigned.`;
+    } else if (p.short.length) {
+      cls += ' warn';
+      text = `Every session is assigned, but the week is still short ${needs} — something else has one too many.`;
+    } else {
+      cls += ' ok';
+      text = 'Every deep session is spoken for, and the targets add up.';
+    }
+    return `<section class="${cls}" aria-live="polite"><p>${text}</p>${button}</section>`;
+  }
+
   /* Past weeks, one row per meter, so the question it answers is the one you
      actually ask: not "what did week 37 look like" but "have I been going to
      the gym". */
@@ -412,7 +468,7 @@
       h += '<section class="rows earlier"><h2>Earlier today</h2>' + earlier.map((b) => rowHTML(b, now)).join('') + '</section>';
     }
     if (!today.length) h += '<section class="rows"><p class="empty">Nothing scheduled today.</p></section>';
-    return h + metersHTML() + historyHTML();
+    return h + metersHTML() + planHTML() + historyHTML();
   }
 
   /* ---------- Week view ---------- */
@@ -440,7 +496,7 @@
     const px = (m) => ((m - GRID_START) / 60) * HOUR_PX;
     const height = (span / 60) * HOUR_PX;
 
-    let h = metersHTML() + `<div class="gridwrap"><div class="grid" style="--h:${HOUR_PX}px">`;
+    let h = metersHTML() + planHTML() + `<div class="gridwrap"><div class="grid" style="--h:${HOUR_PX}px">`;
     h += '<div class="corner"></div>';
     DAYS.forEach((name, i) => {
       h += `<div class="dayhead${i === today ? ' today' : ''}"><div class="dn">${name}</div>
@@ -576,6 +632,20 @@
         render();
       });
     });
+    const fill = root.querySelector('[data-fill]');
+    if (fill) {
+      fill.addEventListener('click', () => {
+        const p = plan();
+        /* Shortfalls in the order the categories are declared, so the earliest
+           free slot goes to the first meter on the page and the result is the
+           same every time. Every slot stays tappable afterwards. */
+        const want = [];
+        p.short.forEach((x) => { for (let i = 0; i < x.n; i++) want.push(x.key); });
+        p.ahead.forEach((b) => { if (want.length) state.slots[b.id] = want.shift(); });
+        render();
+        save();
+      });
+    }
     root.querySelectorAll('[data-id]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
