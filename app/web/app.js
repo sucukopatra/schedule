@@ -376,8 +376,39 @@
     h += view === 'today' ? todayHTML() : weekHTML();
     h += `<p class="status" data-status role="status">${esc(status)}</p>`;
     h += '<dialog id="dlg"></dialog></div>';
+    const place = takePlace();
     root.innerHTML = h;
     bind();
+    putPlace(place);
+  }
+
+  /* A render replaces everything under #root, so whatever the browser was
+     holding on to goes with it: the week grid's horizontal scroll, and
+     keyboard focus. Without this the 60 s tick snaps the grid back to Monday
+     and drops focus to <body> mid-tab. */
+  const PLACE_ATTRS = ['data-id', 'data-view', 'data-type'];
+
+  function takePlace() {
+    const grid = root.querySelector('.gridwrap');
+    const active = document.activeElement;
+    let focus = '';
+    if (active && active !== document.body && root.contains(active)) {
+      PLACE_ATTRS.some((a) => {
+        const v = active.getAttribute(a);
+        if (v === null) return false;
+        focus = `[${a}="${v}"]`;
+        return true;
+      });
+    }
+    return { left: grid ? grid.scrollLeft : 0, focus };
+  }
+
+  function putPlace(place) {
+    const grid = root.querySelector('.gridwrap');
+    if (grid && place.left) grid.scrollLeft = place.left;
+    if (!place.focus) return;
+    const el = root.querySelector(place.focus);
+    if (el) el.focus({ preventScroll: true });
   }
 
   function openDeep(id) {
@@ -396,12 +427,18 @@
       <button type="button" class="primary" id="dlg-close">Close</button></div>`;
     dlg.innerHTML = h;
     dialogOpen = true;
-    dlg.addEventListener('close', () => { dialogOpen = false; render(); save(); }, { once: true });
+    /* Opening and closing without picking anything is not a change, and must
+       not bump savedAt or write a state.json for an untouched week. */
+    let changed = false;
+    dlg.addEventListener('close', () => { dialogOpen = false; render(); if (changed) save(); }, { once: true });
     dlg.querySelectorAll('[data-cat]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const cat = btn.getAttribute('data-cat');
-        if (cat) state.slots[id] = cat;
-        else { delete state.slots[id]; delete state.done[id]; }
+        if (cat !== picked) {
+          if (cat) state.slots[id] = cat;
+          else { delete state.slots[id]; delete state.done[id]; }
+          changed = true;
+        }
         dlg.close();
       });
     });
@@ -409,6 +446,7 @@
       if (!state.slots[id]) return;
       if (state.done[id]) delete state.done[id];
       else state.done[id] = true;
+      changed = true;
       dlg.close();
     });
     dlg.querySelector('#dlg-close').addEventListener('click', () => dlg.close());
@@ -438,7 +476,14 @@
     });
   }
 
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pull(); });
+  /* Render first: the clock has moved on while the tab was hidden, and pull()
+     only re-renders when the server happens to have newer state, so without
+     this the Now card keeps showing whatever was running at lock time. */
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    if (!dialogOpen) render();
+    pull();
+  });
 
   status = 'Tap a deep session to choose what goes in it.';
   render();
