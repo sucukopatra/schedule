@@ -83,10 +83,12 @@ Server layout today:
 Plain files in `app/web/`, no build step and no bundler. The icons are the one
 generated thing, and they are committed, not built at deploy time:
 
-- `index.html` — document shell: head, `<div id="root">`, a
-  `<script id="state" type="application/json">` block holding the empty default
-  state, tags for the other files, and the service worker registration.
-  `schedule.js` must load before `app.js`.
+- `index.html` — document shell: head, `<div id="root">`, tags for the other
+  files, and the service worker registration. `schedule.js` must load before
+  `app.js`. It carries no state: an empty default used to sit in a
+  `<script type="application/json">` block, but nothing ever templated it, so
+  it was always the same empty object and the comparison against it was always
+  won by whatever localStorage held.
 - `style.css` — all CSS, mobile-first, colour tokens on `:root` for light/dark.
 - `schedule.js` — **the timetable, and the only file you edit to change it.**
   Pure data: one `SCHEDULE` object with term settings, week types and their
@@ -135,11 +137,17 @@ registration just fails there and the page carries on with localStorage.
 
 - **Today** is the default, and the reason to open the page at all: a card for
   what is running now with time remaining, what is next and in how long,
-  anything else still running, the rest of today as a tap-to-tick list, then
-  the week's counts, the plan line and recent weeks.
+  anything else still running, the rest of today as a tap-to-tick list, a
+  read-only peek at tomorrow, then the week's counts, the plan line and recent
+  weeks.
 - **Week** is the full seven-day grid, mainly useful on a desktop.
 
 Both views end with the counts, the plan line and the recent-weeks strip.
+
+The tomorrow peek is deliberately not tickable: tomorrow's ticks are
+tomorrow's business, and a deep session that has not been assigned reads
+"Not chosen yet" there rather than inviting a tap. On a Sunday it shows next
+week's Monday, under next week's type rather than this one's.
 
 ### The plan line
 
@@ -185,8 +193,15 @@ so drops that week's tick for it, which is normally what you want.
 
 `week` is the ISO week the ticks belong to. On the first load of a new week the
 page files the finished week into `history`, clears `done`, keeps `slots` so
-the plan carries over, and resets `type` to `normal` — so there is no "start a
-new week" button to remember to press. Unknown and missing fields are dropped
+the plan carries over, and sets `type` from the calendar — so there is no
+"start a new week" button to remember to press.
+
+A week type can claim ISO weeks in `schedule.js` (`weeks.exam.isoWeeks`), and a
+week nothing claims is normal. The type is set when the week rolls over, so
+adding a week to that list mid-week does nothing until the next Monday; the
+buttons in the header still override it for the rest of the week. Both lists
+ship empty — the trip and exam dates are yours to fill in, and
+`tools/check-schedule.js` will complain if two types claim the same week. Unknown and missing fields are dropped
 on load, so a malformed or outdated `state.json` degrades to an empty week
 rather than breaking the page.
 

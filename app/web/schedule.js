@@ -16,6 +16,9 @@
      track  counts toward the meter of this name
      weeks  which week types it shows up in; omit for all of them
 
+   A week type can name the ISO weeks it applies to (isoWeeks, below), so trip
+   and exam weeks arrive on their own instead of waiting to be remembered.
+
    Tickable blocks get a stable id from their kind, day and start time, so
    moving a block loses its ticks for that week. That is usually what you want.
    --------------------------------------------------------------------------- */
@@ -29,10 +32,14 @@ var SCHEDULE = {
   wake:      { weekday: '07:30', weekend: '08:30' },
   lightsOut: '23:30',
 
+  /* isoWeeks: the weeks this type takes over, as ISO week strings. The type is
+     set when the week rolls over on Monday; the buttons in the header still
+     override it for the rest of that week. A week no type claims is normal, so
+     `normal` never needs a list. Two types must not claim the same week. */
   weeks: {
     normal: { label: 'Normal', targets: { coursework: 3, software: 2, chess: 1, gym: 3 } },
-    trip:   { label: 'Trip',   targets: { coursework: 2, software: 1, chess: 1, gym: 2 } },
-    exam:   { label: 'Exam',   targets: { coursework: 6, software: 0, chess: 0, gym: 2 } }
+    trip:   { label: 'Trip',   targets: { coursework: 2, software: 1, chess: 1, gym: 2 }, isoWeeks: [] },
+    exam:   { label: 'Exam',   targets: { coursework: 6, software: 0, chess: 0, gym: 2 }, isoWeeks: [] }
   },
 
   categories: {

@@ -79,6 +79,9 @@ header.top{display:flex;align-items:flex-start;justify-content:space-between;gap
 /* ---------- today rows ---------- */
 .rows{margin-bottom:22px}
 .rows.earlier{opacity:.7}
+.rows.tomorrow{opacity:.78}
+/* Dashed to read as not-yet, but the kind stripe stays solid. */
+.rows.tomorrow .row{background:transparent;border-style:dashed;border-left-style:solid}
 .empty{margin:0;color:var(--muted)}
 .row{
   display:flex;align-items:center;gap:12px;width:100%;text-align:left;

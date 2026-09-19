@@ -69,6 +69,22 @@ WEEK_TYPES.forEach((t) => {
   });
 });
 
+/* isoWeeks has to look like an ISO week, and no two types may claim one. */
+const claimed = {};
+WEEK_TYPES.forEach((t) => {
+  const weeks = SCHEDULE.weeks[t].isoWeeks;
+  if (weeks === undefined) return;
+  if (!Array.isArray(weeks)) return err(`${t}.isoWeeks is not a list`);
+  weeks.forEach((w) => {
+    if (typeof w !== 'string' || !/^\d{4}-W\d{2}$/.test(w)) return err(`${t}.isoWeeks: ${JSON.stringify(w)} is not an ISO week like 2026-W46`);
+    if (claimed[w]) err(`${w} is claimed by both ${claimed[w]} and ${t}`);
+    claimed[w] = t;
+  });
+});
+if (SCHEDULE.weeks.normal && SCHEDULE.weeks.normal.isoWeeks) {
+  note('normal.isoWeeks is redundant: a week no type claims is already normal');
+}
+
 /* A meter exists for every category, for gym, and for each habit meter. */
 const meters = new Set([...Object.keys(SCHEDULE.categories), 'gym',
                         ...SCHEDULE.habitMeters.map((m) => m.track)]);

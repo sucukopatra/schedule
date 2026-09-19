@@ -7,7 +7,7 @@ section; tick things off as they land.
 
 ### Round 2, found and fixed 2026-09-19 by audit
 
-Not yet deployed to bmo.
+Deployed to bmo 2026-09-19.
 
 - [x] **Offline edits are never pushed back.** *The serious one.* `pull()` only
       pushes when the server has **no** state at all (`s === null`). If the
@@ -73,10 +73,16 @@ All three in `app.js`. Deployed to bmo.
 
 ## Checks
 
-`tools/check-schedule.js`, `tools/check-sync.js` and `tools/check-server.sh`,
-added 2026-09-19. Outside `app/`, so never deployed. Run all three before a
-deploy. Each was confirmed to fail on a deliberately introduced fault, which is
-the only thing that makes a check worth having.
+`check-schedule.js`, `check-sync.js`, `check-plan.js` and `check-server.sh` in
+`tools/`, with `harness.js` shared by the middle two. Outside `app/`, so never
+deployed. Run all four before a deploy. Each was confirmed to fail on a
+deliberately introduced fault, which is the only thing that makes a check worth
+having.
+
+The harness is not a browser — no layout, no CSS, no event bubbling. It can say
+a handler did the right thing to the state, never that a button was reachable
+or legible. For that, render a state through it, drop the HTML next to the real
+`style.css`, and look at it.
 
 ## Worth knowing (checked, not bugs)
 
@@ -85,11 +91,11 @@ the only thing that makes a check worth having.
   consecutive days.
 - `schedule.js` is structurally clean: no reversed or zero-length blocks, none
   outside the grid, no duplicate ids, no overlaps, no track without a meter.
-- **Normal weeks have exactly zero slack: 6 deep slots against 6 category
-  targets.** Every single slot has to be assigned correctly or the week cannot
-  add up. Exam weeks have 3 gym blocks for a target of 2, so those have one
-  spare. This is what makes the "close the loop" item below worth more than it
-  first looks.
+- **Every week type has exactly zero slack**: 6 deep slots against 6 category
+  targets in a normal week, 4 against 4 on a trip. Every single slot has to be
+  assigned correctly or the week cannot add up. Exam weeks have 3 gym blocks
+  for a target of 2, so those have one spare. This is what the plan line exists
+  for.
 - The two `review` blocks are tickable but feed no meter. That reads as
   deliberate — they are ticked, they just do not count.
 
@@ -132,22 +138,29 @@ the only thing that makes a check worth having.
 
 ## Smaller
 
-- [ ] **Date-driven week types.** Pressing Trip/Exam by hand is the same kind of
-      chore the no-"start-a-new-week"-button design already removed. Let
-      `weeks.exam` carry `isoWeeks: [...]` and have `rollWeek` set the type,
-      with the buttons as a manual override.
-- [ ] **Tomorrow peek** at the bottom of Today. The Week grid is a desktop
-      thing; at 22:30 you just want to know what the morning looks like.
+- [x] **Date-driven week types.** Done 2026-09-20. `weeks.trip` and
+      `weeks.exam` carry an `isoWeeks` list; `rollWeek` sets the type from it
+      on the Monday roll and the header buttons still override for that week.
+      Both lists ship **empty** — the actual trip and exam dates are yours to
+      fill in, and nothing changes until you do.
+      `check-schedule.js` rejects a malformed week string and a week claimed by
+      two types; `check-sync.js` covers the roll both ways against a temporary
+      copy of `schedule.js` that claims a week.
+- [x] **Tomorrow peek.** Done 2026-09-20. Sits after "Earlier today", before
+      the week-level summaries, so the day-level things stay together. Dashed
+      and read-only — tomorrow's ticks are tomorrow's business — and an
+      unassigned deep session reads "Not chosen yet" rather than inviting a
+      tap. On a Sunday it shows next week's Monday under next week's type.
 - [x] **Generalise `STATIC` in `server.py`.** Done 2026-09-19, as the
       prerequisite for the PWA files. Now a `TYPES` extension map plus a bare-
       filename check; traversal attempts and `/server.py` all 404. Deploying
       this needs the container recreated, which `schedule-deploy` does by
       itself because `server.py` changed.
-- [ ] **Validate `schedule.js` on load.** Nothing checks the hand-edited data:
-      `at: '23:30-00:30'` gives `e < s` and a negative height, an unknown
-      `track` silently never reaches a meter. A few `console.warn`s would catch
-      typos at the moment they are made.
-- [ ] **Drop the vestigial embedded state.** Nothing templates
-      `<script id="state">`, so it is always the empty default and
-      `stored.savedAt > embedded.savedAt` is always true. Either use `blank()`
-      or say in the docs that it is only a default.
+- [~] **Validate `schedule.js` on load.** Skipped on purpose, 2026-09-20.
+      `tools/check-schedule.js` already does this properly and in more depth.
+      Duplicating the rules inside `app.js` would mean two places to keep in
+      step, and the copy in the page would be the one that quietly rots.
+- [x] **Drop the vestigial embedded state.** Done 2026-09-20. The
+      `<script id="state">` block and the comparison against it are gone;
+      startup is `normalize(stored)`, and `normalize(null)` was already
+      `blank()`.

@@ -11,8 +11,24 @@
    half of the contract: a page where nothing was ticked must never write a
    state.json. */
 'use strict';
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const drive = require('./harness.js');
 const webDir = process.argv[2] || undefined;
+
+/* Date-driven week types only do anything if schedule.js names some weeks, and
+   the real one deliberately names none -- the trip and exam dates are the
+   user's to fill in. So build a copy that claims one. Appending beats editing:
+   it does not care how the file is formatted. */
+function webClaiming(type, week) {
+  const src = webDir || path.join(__dirname, '..', 'app', 'web');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'schedule-check-'));
+  ['schedule.js', 'app.js'].forEach((f) => fs.copyFileSync(path.join(src, f), path.join(dir, f)));
+  fs.appendFileSync(path.join(dir, 'schedule.js'),
+    `\nSCHEDULE.weeks[${JSON.stringify(type)}].isoWeeks = [${JSON.stringify(week)}];\n`);
+  return dir;
+}
 
 function isoWeekNow() {
   const d = new Date();
@@ -133,6 +149,18 @@ CASES.push(
     if (fails.length) { bad++; console.log(`  FAIL ${c.name}\n       ${fails.join('\n       ')}`); }
     else console.log(`  ok   ${c.name}  -- ${c.why}`);
   }
-  console.log(bad ? `\n${bad} sync case(s) failed` : `\nall ${CASES.length} sync cases correct`);
+  /* Rolling into a week the calendar claims picks that type up; rolling into
+     one nothing claims goes back to normal. */
+  for (const [label, dir, want] of [
+    ['L. rolls into a week the calendar claims', webClaiming('exam', W), 'exam'],
+    ['M. rolls into a week nothing claims', undefined, 'normal'],
+  ]) {
+    const r = await drive({ serverState: { ...FINISHED_V2, type: 'trip' }, webDir: dir || webDir });
+    if (r.stored && r.stored.type === want) console.log(`  ok   ${label} -- type is ${want}`);
+    else { bad++; console.log(`  FAIL ${label}\n       type ${r.stored && r.stored.type}, expected ${want}`); }
+    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+  }
+
+  console.log(bad ? `\n${bad} sync case(s) failed` : `\nall ${CASES.length + 2} sync cases correct`);
   process.exit(bad ? 1 : 0);
 })();

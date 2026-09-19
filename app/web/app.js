@@ -69,8 +69,22 @@
 
   /* ---------- state ---------- */
 
-  const blank = () => ({ v: 3, week: isoWeek(new Date()), type: 'normal',
-                         slots: {}, done: {}, history: [], savedAt: 0 });
+  /* A week type the calendar picks, so a trip or an exam week does not depend
+     on remembering to press a button. A week no type claims is normal, and the
+     buttons still override whatever this returns for the rest of that week. */
+  function typeForWeek(week) {
+    let picked = 'normal';
+    WEEK_TYPES.forEach((t) => {
+      const weeks = SCHEDULE.weeks[t].isoWeeks;
+      if (Array.isArray(weeks) && weeks.indexOf(week) >= 0) picked = t;
+    });
+    return picked;
+  }
+
+  const blank = () => {
+    const week = isoWeek(new Date());
+    return { v: 3, week: week, type: typeForWeek(week), slots: {}, done: {}, history: [], savedAt: 0 };
+  };
 
   /* v2 had no history, so migrating is just defaulting it to empty. Entries
      are validated the same way everything else is: anything unrecognised is
@@ -127,16 +141,14 @@
     }
     s.week = now;
     s.done = {};
-    s.type = 'normal';
+    s.type = typeForWeek(now);
     return true;
   }
 
-  let embedded = {};
-  try { embedded = JSON.parse(document.getElementById('state').textContent); } catch (e) { /* default below */ }
   let stored = null;
   try { stored = JSON.parse(localStorage.getItem(KEY)); } catch (e) { /* no localStorage */ }
 
-  let state = normalize((stored && (stored.savedAt || 0) > (embedded.savedAt || 0)) ? stored : embedded);
+  let state = normalize(stored);
   let needsRollSave = rollWeek(state);
 
   let view = 'today';
@@ -443,6 +455,30 @@
     return h + '</section>';
   }
 
+  /* At 22:30 the Week grid is the wrong thing to reach for -- you just want to
+     know what the morning looks like. Read-only: tomorrow's ticks are
+     tomorrow's business. */
+  function tomorrowHTML() {
+    const di = (dayIndex(new Date()) + 1) % 7;
+    /* Sunday's tomorrow is next week's Monday, and a week always starts as
+       whatever the calendar says, which is normal unless a type claims it. */
+    const type = di === 0 ? typeForWeek(isoWeek(new Date(Date.now() + 86400000))) : state.type;
+    const blocks = BLOCKS.filter((b) => b.d === di && b.weeks.indexOf(type) >= 0);
+    if (!blocks.length) return '';
+
+    let h = `<section class="rows tomorrow"><h2>Tomorrow · ${esc(LONG[di])}</h2>`;
+    blocks.forEach((b) => {
+      const f = face(b);
+      /* face() invites a tap on an open session. Not from here. */
+      const note = b.kind === 'deep' && !state.slots[b.id] ? 'Not chosen yet' : f.note;
+      h += `<div class="row k-${b.kind}" style="${f.color ? `--c:${f.color}` : ''}">
+        <span class="rtime">${hhmm(b.s)}</span>
+        <span class="rbody"><span class="rtitle">${esc(f.title)}</span>${note ? `<span class="rnote">${esc(note)}</span>` : ''}</span>
+      </div>`;
+    });
+    return h + '</section>';
+  }
+
   function todayHTML() {
     const d = new Date();
     const di = dayIndex(d);
@@ -468,7 +504,7 @@
       h += '<section class="rows earlier"><h2>Earlier today</h2>' + earlier.map((b) => rowHTML(b, now)).join('') + '</section>';
     }
     if (!today.length) h += '<section class="rows"><p class="empty">Nothing scheduled today.</p></section>';
-    return h + metersHTML() + planHTML() + historyHTML();
+    return h + tomorrowHTML() + metersHTML() + planHTML() + historyHTML();
   }
 
   /* ---------- Week view ---------- */
