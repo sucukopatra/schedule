@@ -106,9 +106,9 @@ or legible. For that, render a state through it, drop the HTML next to the real
       `api/state` is left alone. Icons rendered from `icon.svg`. Verified
       offline in Zen on 2026-09-19: server stopped, page still renders.
       Deployed to bmo 2026-09-19; all files serve through Caddy over HTTPS,
-      container healthy. Still to do: install it on the phone — *Add to Home
-      Screen* in Safari, the install prompt in Android Chrome. Firefox on the
-      desktop does not install PWAs, so that part cannot be checked here.
+      container healthy. Installed on the phone 2026-09-20 — the PWA work is
+      finished. (Firefox on the desktop does not install PWAs, so that part
+      was never checkable here.)
 - [x] **Keep history.** Done 2026-09-20. `rollWeek()` files the finished week
       into `history` before clearing the ticks, `[done, target]` per meter,
       capped at 26 and drawn eight at a time under the meters as one row per
