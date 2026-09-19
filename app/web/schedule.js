@@ -35,7 +35,7 @@ var SCHEDULE = {
   /* The term's first and last day, used only to generate schedule.ics — the
      page itself does not care. Both are inclusive, YYYY-MM-DD. */
   termStart: '2026-09-14',
-  termEnd:   '2027-01-09',
+  termEnd:   '2026-12-22',
 
   /* Minutes of warning in the calendar feed, by kind. A kind that is not
      listed gets no alarm, which is why habit is absent: a reminder to eat
@@ -49,7 +49,13 @@ var SCHEDULE = {
   weeks: {
     normal: { label: 'Normal', targets: { coursework: 3, software: 2, chess: 1, gym: 3 } },
     trip:   { label: 'Trip',   targets: { coursework: 2, software: 1, chess: 1, gym: 2 }, isoWeeks: [] },
-    exam:   { label: 'Exam',   targets: { coursework: 6, software: 0, chess: 0, gym: 2 }, isoWeeks: [] }
+    /* Midterms 1–8 Nov, finals 12–22 Dec. Both periods straddle a week
+       boundary, and every week either one touches is listed: W44 holds only
+       Sunday 1 Nov and W50 only the weekend of 12–13 Dec, but those are the
+       run-ups, which is when the exam targets are worth having. Drop either
+       one if you would rather keep that week normal. */
+    exam:   { label: 'Exam',   targets: { coursework: 6, software: 0, chess: 0, gym: 2 },
+              isoWeeks: ['2026-W44', '2026-W45', '2026-W50', '2026-W51', '2026-W52'] }
   },
 
   categories: {

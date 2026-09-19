@@ -149,6 +149,22 @@ CASES.push(
     if (fails.length) { bad++; console.log(`  FAIL ${c.name}\n       ${fails.join('\n       ')}`); }
     else console.log(`  ok   ${c.name}  -- ${c.why}`);
   }
+  /* The real schedule.js names the midterm and finals weeks, so check those
+     dates are actually picked up rather than only the mechanism. */
+  for (const [label, when, week, want] of [
+    ['N. a midterm week, from the real schedule.js', new Date(2026, 10, 3), '2026-W45', 'exam'],
+    ['O. a finals week, from the real schedule.js', new Date(2026, 11, 15), '2026-W51', 'exam'],
+    ['P. an ordinary teaching week', new Date(2026, 10, 10), '2026-W46', 'normal'],
+  ]) {
+    const r = await drive({
+      serverState: { ...FINISHED_V2, week: '2026-W40', type: 'trip' },
+      now: when.getTime(), webDir,
+    });
+    const got = r.stored || {};
+    if (got.week === week && got.type === want) console.log(`  ok   ${label} -- ${week} is ${want}`);
+    else { bad++; console.log(`  FAIL ${label}\n       ${got.week} / ${got.type}, expected ${week} / ${want}`); }
+  }
+
   /* Rolling into a week the calendar claims picks that type up; rolling into
      one nothing claims goes back to normal. */
   for (const [label, dir, want] of [
@@ -161,6 +177,6 @@ CASES.push(
     if (dir) fs.rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log(bad ? `\n${bad} sync case(s) failed` : `\nall ${CASES.length + 2} sync cases correct`);
+  console.log(bad ? `\n${bad} sync case(s) failed` : `\nall ${CASES.length + 5} sync cases correct`);
   process.exit(bad ? 1 : 0);
 })();

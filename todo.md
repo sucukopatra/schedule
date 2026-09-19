@@ -84,6 +84,19 @@ a handler did the right thing to the state, never that a button was reachable
 or legible. For that, render a state through it, drop the HTML next to the real
 `style.css`, and look at it.
 
+## Term dates
+
+Set 2026-09-20 from what the user gave: midterms 1–8 Nov, finals 12–22 Dec, so
+`termEnd` is 2026-12-22. **`termStart` (2026-09-14) is still a guess** — it was
+never confirmed, and it only affects dates already in the past, so the cost of
+being wrong is a few phantom events in mid-September.
+
+Both exam periods straddle a week boundary. Every ISO week either one touches
+is marked exam — W44, W45, W50, W51, W52 — even though W44 holds only Sunday
+1 Nov and W50 only the weekend of 12–13 Dec. The reasoning: those are the
+run-ups, which is when the exam targets earn their keep. Dropping either is a
+one-line edit.
+
 ## Worth knowing (checked, not bugs)
 
 - `isoWeek()` is correct, including the year-boundary cases: verified against
