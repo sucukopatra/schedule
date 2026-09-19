@@ -226,7 +226,7 @@ schedule-deploy() {
   [[ -z "$out" ]] && { echo "Nothing changed."; return 0; }
   echo "$out"
   if grep -q 'server\.py' <<<"$out"; then
-    ssh bmo 'cd /srv/docker && docker compose up -d schedule' \
+    ssh bmo 'cd /srv/docker && docker compose up -d --force-recreate schedule' \
       && echo "Recreated schedule (server.py changed)."
   fi
 }
@@ -236,10 +236,18 @@ schedule-deploy() {
 - The trailing slash on `"$src/app/"` matters; without it rsync creates `app/app/`.
 - Page changes need no restart. Changes to `server.py` need the container
   recreated, which the function does automatically.
-- Use `docker compose up -d schedule`, not `docker restart schedule`. The
-  service is defined in `stacks/schedule.yml` and included by `compose.yml`;
-  `restart` fails outright if the container does not exist, which is the state
-  you are in after a `compose down`, a prune, or a first deploy.
+- Use `docker compose up -d --force-recreate schedule`. Both halves matter:
+  - Not `docker restart schedule`. The service is defined in
+    `stacks/schedule.yml` and included by `compose.yml`; `restart` fails
+    outright if the container does not exist, which is the state you are in
+    after a `compose down`, a prune, or a first deploy.
+  - `--force-recreate`, because without it Compose compares the *service
+    definition*, not the code. `server.py` arrives through a bind mount, so
+    nothing Compose looks at has changed: it prints `Container schedule
+    Running`, leaves the old process up, and the deploy silently does nothing.
+    This bit on 2026-09-19 and it looks exactly like the missed-Caddy-reload
+    symptom — `/` keeps working while the newer files 404, because the running
+    process still has the old routes.
 - Changes to the compose file or Caddyfile are made on bmo by hand, not by
   this deploy.
 

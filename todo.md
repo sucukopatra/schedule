@@ -28,7 +28,8 @@ Fixed 2026-09-19, all three in `app.js`. Not yet deployed to bmo.
       the page files and serves network-first, so edit-and-reload still works;
       `api/state` is left alone. Icons rendered from `icon.svg`. Verified
       offline in Zen on 2026-09-19: server stopped, page still renders.
-      Still to do: deploy to bmo, then install on the phone — *Add to Home
+      Deployed to bmo 2026-09-19; all files serve through Caddy over HTTPS,
+      container healthy. Still to do: install it on the phone — *Add to Home
       Screen* in Safari, the install prompt in Android Chrome. Firefox on the
       desktop does not install PWAs, so that part cannot be checked here.
 - [ ] **Keep history.** `rollWeek()` wipes `done` and nothing survives, so the
