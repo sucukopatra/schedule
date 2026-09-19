@@ -273,9 +273,23 @@ normal reload may keep the cached copy.
 
 With the service worker registered, a hard reload is not always enough — it
 only bypasses the HTTP cache, not the worker. If a change refuses to show up,
-use *Application → Service workers → Update on reload* in devtools, or
-unregister the worker there. `localhost` is a separate registration from bmo,
-so nothing you do locally affects the installed copy on your phone.
+open `about:debugging#/runtime/this-firefox`, find the registration under
+*Service Workers*, and **Unregister** it. (The same thing lives in devtools
+under *Application*, behind the `»` overflow at the end of the panel row; the
+caches themselves are in *Storage → Cache Storage*, as `shell-v1` and
+`fonts-v1`.) `localhost` is a separate registration from bmo, so nothing you do
+locally affects the installed copy on your phone.
+
+To test offline, stop the server rather than looking for a devtools offline
+toggle — Firefox has no equivalent of Chrome's checkbox, and killing the server
+is the condition you actually care about. The page should still render and the
+status line should read *Offline, saving on this device*.
+
+Note that Firefox on the desktop does not install PWAs, so the manifest does
+nothing visible in Zen; desktop is only good for checking that the worker
+registers and that offline works. Installing is a phone thing: Safari via
+*Share → Add to Home Screen*, Android Chrome via the install prompt. Service
+workers are also disabled in private windows.
 
 To test against a copy of the real data (one direction only, safe):
 

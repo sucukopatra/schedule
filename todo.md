@@ -26,11 +26,11 @@ Fixed 2026-09-19, all three in `app.js`. Not yet deployed to bmo.
 
 - [x] **PWA: manifest + service worker.** Done 2026-09-19. `sw.js` precaches
       the page files and serves network-first, so edit-and-reload still works;
-      `api/state` is left alone. Icons rendered from `icon.svg`. Needs an
-      install on the phone to be worth anything — *Add to home screen* once it
-      is deployed. **Not yet verified in a real browser:** registration,
-      offline start and the install prompt still need one pass through
-      devtools.
+      `api/state` is left alone. Icons rendered from `icon.svg`. Verified
+      offline in Zen on 2026-09-19: server stopped, page still renders.
+      Still to do: deploy to bmo, then install on the phone — *Add to Home
+      Screen* in Safari, the install prompt in Android Chrome. Firefox on the
+      desktop does not install PWAs, so that part cannot be checked here.
 - [ ] **Keep history.** `rollWeek()` wipes `done` and nothing survives, so the
       app cannot answer "did I hit gym 3× this month?". Append
       `{week, type, counts}` to a `history` array capped at ~26 weeks before
