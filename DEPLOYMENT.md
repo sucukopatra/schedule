@@ -299,6 +299,37 @@ registers and that offline works. Installing is a phone thing: Safari via
 *Share → Add to Home Screen*, Android Chrome via the install prompt. Service
 workers are also disabled in private windows.
 
+### Checks
+
+Three scripts in `tools/`, no dependencies beyond `node`, `python3` and `curl`.
+They live outside `app/`, so they are never deployed. Run them before a deploy;
+each exits non-zero on a failure.
+
+```bash
+node tools/check-schedule.js   # invariants for the hand-edited timetable
+node tools/check-sync.js       # load -> pull -> push, against a fake server
+tools/check-server.sh          # the HTTP contract, on a throwaway DATA_DIR
+```
+
+- **check-schedule.js** catches what nothing validates at runtime: a block that
+  ends before it starts, one outside the grid, a duplicate id, a `track` with
+  no meter, a week whose targets cannot be met by the slots on offer. Overlaps
+  and tickable-but-uncounted blocks are printed as notes, not errors, because
+  trips are meant to overlap and the reviews are meant to be tickable without
+  counting.
+- **check-sync.js** runs the real `app.js` against a fake server under a small
+  DOM stub. It pins both halves of the contract: work done offline gets pushed
+  once the server is back, and a page where nothing was ticked never writes a
+  `state.json`.
+- **check-server.sh** starts a real server on a free port and walks the HTTP
+  contract, including the two requests that once got no reply at all — a
+  filename too long for the filesystem, and a non-numeric `Content-Length` —
+  and asserts the log holds no tracebacks.
+
+Both `.js` scripts take an optional path, so you can point them at a copy and
+confirm they still fail on a fault you introduce deliberately. That is worth
+doing when you add a case: a check that cannot fail is not a check.
+
 To test against a copy of the real data (one direction only, safe):
 
 ```bash

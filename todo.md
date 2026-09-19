@@ -71,6 +71,13 @@ All three in `app.js`. Deployed to bmo.
       nothing was ticked — which the docs say never happens. Only save on a
       real change.
 
+## Checks
+
+`tools/check-schedule.js`, `tools/check-sync.js` and `tools/check-server.sh`,
+added 2026-09-19. Outside `app/`, so never deployed. Run all three before a
+deploy. Each was confirmed to fail on a deliberately introduced fault, which is
+the only thing that makes a check worth having.
+
 ## Worth knowing (checked, not bugs)
 
 - `isoWeek()` is correct, including the year-boundary cases: verified against
