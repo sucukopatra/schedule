@@ -37,7 +37,12 @@ function drive({ serverState, localState }) {
                  textContent: '', addEventListener() {} };
   const ctx = {
     console, Date, JSON, Math, Object, Number, String, Array, Promise, Error, URL,
-    setTimeout, clearTimeout, setInterval: () => 0,
+    /* app.js debounces its push by 1.5 s. Fast-forward every timer it sets so
+       a debounced save still lands inside this harness's settle window --
+       otherwise a case that saves through save() rather than push() looks
+       like a case that never sends anything. */
+    setTimeout: (fn, ms) => setTimeout(fn, Math.min(ms || 0, 5)),
+    clearTimeout, setInterval: () => 0,
     localStorage: {
       getItem: (k) => (k in store ? store[k] : null),
       setItem: (k, v) => { store[k] = String(v); },
@@ -69,6 +74,16 @@ function drive({ serverState, localState }) {
 }
 
 const W = isoWeekNow();
+/* The ISO week before this one, for the roll cases. */
+function isoWeekBack(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - 7 * n);
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const jan1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  return t.getUTCFullYear() + '-W' + String(Math.ceil(((t - jan1) / 86400000 + 1) / 7)).padStart(2, '0');
+}
+const LAST = isoWeekBack(1);
 const base = { v: 2, week: W, type: 'normal', slots: {}, done: {} };
 const OLD = { ...base, savedAt: 1000 };
 const MINE = { ...base, done: { 'gym-Thu-18:15': true }, savedAt: 9000 };
@@ -96,6 +111,40 @@ const CASES = [
     why: 'keep only keys that still name a real block of the right kind' },
 ];
 
+/* A finished week, as v2 wrote it: no history field at all. gym-Thu-18:15 and
+   gym-Tue-19:30 ticked is 2 of a target of 3; German ticked once of the 6 on
+   the timetable. */
+const FINISHED_V2 = {
+  v: 2, week: LAST, type: 'normal',
+  slots: { 'deep-Thu-16:00': 'coursework' },
+  done: { 'gym-Thu-18:15': true, 'gym-Tue-19:30': true, 'deep-Thu-16:00': true, 'habit-Mon-07:45': true },
+  savedAt: 7000,
+};
+
+CASES.push(
+  { name: 'H. v2 state from a finished week rolls into history',
+    state: { serverState: FINISHED_V2, localState: null },
+    put: true, week: W, done: {}, type: 'normal',
+    history: [{ week: LAST, gym: [2, 3], coursework: [1, 3], german: [1, 7] }],
+    why: 'the week is recorded before its ticks are cleared, and the roll is saved' },
+  { name: 'I. same week as stored, nothing rolls',
+    state: { serverState: { ...FINISHED_V2, week: W }, localState: null },
+    put: false, week: W, history: [],
+    why: 'no roll, so no history entry and nothing to send' },
+  { name: 'J. a v2 state with no history migrates to an empty one',
+    state: { serverState: { ...FINISHED_V2, week: W }, localState: null },
+    put: false, history: [], v: 3,
+    why: 'v2 never recorded history, so migrating is just defaulting it' },
+  { name: 'K. junk history entries are dropped',
+    state: { serverState: { ...FINISHED_V2, week: W, history: [
+      { week: '2026-W30', type: 'normal', meters: { gym: [2, 3] } },
+      { nope: true }, 'garbage', null,
+      { week: '2026-W31', type: 'normal', meters: { gym: 'not a pair', chess: [1, 1] } },
+    ] }, localState: null },
+    put: false, historyWeeks: ['2026-W30', '2026-W31'],
+    why: 'unrecognised entries degrade away rather than breaking the page' },
+);
+
 (async () => {
   let bad = 0;
   for (const c of CASES) {
@@ -111,6 +160,26 @@ const CASES = [
       const got_ = JSON.stringify((got.stored || {})[key]);
       const want = JSON.stringify(c[key]);
       if (got_ !== want) fails.push(`${key} ${got_}, expected ${want}`);
+    }
+    for (const key of ['week', 'type', 'v']) {
+      if (!(key in c)) continue;
+      if (!got.stored || got.stored[key] !== c[key]) fails.push(`${key} ${got.stored && got.stored[key]}, expected ${c[key]}`);
+    }
+    if (c.historyWeeks) {
+      const got_ = JSON.stringify((got.stored.history || []).map((e) => e.week));
+      if (got_ !== JSON.stringify(c.historyWeeks)) fails.push(`history weeks ${got_}, expected ${JSON.stringify(c.historyWeeks)}`);
+    }
+    if (c.history) {
+      const h = (got.stored || {}).history || [];
+      if (h.length !== c.history.length) fails.push(`${h.length} history entries, expected ${c.history.length}`);
+      else c.history.forEach((want, i) => {
+        if (h[i].week !== want.week) fails.push(`history[${i}].week ${h[i].week}, expected ${want.week}`);
+        Object.keys(want).forEach((k) => {
+          if (k === 'week') return;
+          const got_ = JSON.stringify(h[i].meters[k]);
+          if (got_ !== JSON.stringify(want[k])) fails.push(`history[${i}].meters.${k} ${got_}, expected ${JSON.stringify(want[k])}`);
+        });
+      });
     }
     if (fails.length) { bad++; console.log(`  FAIL ${c.name}\n       ${fails.join('\n       ')}`); }
     else console.log(`  ok   ${c.name}  -- ${c.why}`);

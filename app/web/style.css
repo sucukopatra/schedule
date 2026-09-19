@@ -119,6 +119,23 @@ button.row{cursor:pointer}
 .mcount{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
 .mnone{font-size:13px;color:var(--muted);margin-top:7px}
 
+/* ---------- recent weeks ---------- */
+.history{
+  padding:16px;background:var(--surface);border:1px solid var(--line);
+  border-radius:12px;margin-bottom:20px;
+}
+.hrow{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.hname{flex:0 0 auto;width:96px;font-size:13px;font-weight:700;font-stretch:88%;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hcells{flex:1 1 auto;display:flex;gap:3px;min-width:0}
+.hcell{flex:1 1 0;min-width:8px;max-width:48px;height:18px;border-radius:3px;border:2px solid var(--line);background:transparent}
+.hcell.met{border-color:var(--c);background:var(--c)}
+.hcell.part{border-color:var(--c);background:repeating-linear-gradient(135deg,transparent 0 3px,color-mix(in srgb,var(--c) 35%,transparent) 3px 5px)}
+.hcell.miss{border-color:var(--line)}
+.hcell.none{border-style:dotted;opacity:.55}
+.hlast{flex:0 0 auto;min-width:32px;text-align:right;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.hfoot{margin:10px 0 0;font-size:12px;color:var(--muted)}
+
 .status{margin:4px 2px 0;font-size:13px;color:var(--muted);min-height:1.3em}
 
 /* ---------- week grid ---------- */

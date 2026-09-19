@@ -150,17 +150,37 @@ so drops that week's tick for it, which is normally what you want.
 ### State
 
 ```json
-{ "v": 2, "week": "2026-W38", "type": "normal",
+{ "v": 3, "week": "2026-W38", "type": "normal",
   "slots": { "deep-Thu-16:00": "coursework" },
   "done":  { "gym-Thu-18:15": true },
+  "history": [
+    { "week": "2026-W37", "type": "normal",
+      "meters": { "coursework": [3, 3], "gym": [2, 3], "german": [6, 7] } }
+  ],
   "savedAt": 1758200000000 }
 ```
 
 `week` is the ISO week the ticks belong to. On the first load of a new week the
-page clears `done`, keeps `slots` so the plan carries over, and resets `type` to
-`normal` — so there is no "start a new week" button to remember to press.
-Unknown and missing fields are dropped on load, so a malformed or outdated
-`state.json` degrades to an empty week rather than breaking the page.
+page files the finished week into `history`, clears `done`, keeps `slots` so
+the plan carries over, and resets `type` to `normal` — so there is no "start a
+new week" button to remember to press. Unknown and missing fields are dropped
+on load, so a malformed or outdated `state.json` degrades to an empty week
+rather than breaking the page.
+
+Each `history` entry is one finished week, `[done, target]` per meter, capped
+at the last 26 and drawn eight at a time under the meters. The target is stored
+rather than looked up later, because `schedule.js` changes between semesters
+and a past week should keep the target it was actually judged against. Habit
+meters have no target of their own, so theirs is however many were on the
+timetable that week.
+
+`slots` and `done` are pruned on load to keys that still name a real block of
+the right kind: moving a block in `schedule.js` changes its id, and the orphan
+would otherwise stay for good.
+
+A roll that happens while adopting another device's state is saved, not just
+applied — otherwise each device would roll the same week separately and keep
+its own private history.
 
 The page only writes to the server once you have actually changed something; a
 fresh page with nothing ticked will not create a `state.json`.
@@ -346,6 +366,10 @@ rsync bmo:/srv/docker/config/caddy/webpages/schedule/data/state.json ./dev-data/
 - A change to the state shape needs either a bump of `v` with a migration in
   `normalize()`, or the knowledge that unrecognised state degrades to an empty
   week. Never edit `data/state.json` on bmo to force a shape.
+  The window to watch after a bump is a device still running the old page from
+  the service worker cache: it drops the field it does not know about and saves
+  the state without it. Loading the page once while online on each device you
+  use closes that window.
 - The timetable belongs in `schedule.js`. If a change needs `app.js` to know
   about a specific class or habit, that is a sign the data model is missing
   something — add a field, not a special case.

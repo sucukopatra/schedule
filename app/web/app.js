@@ -11,6 +11,8 @@
   const CATS = SCHEDULE.categories;
   const KEY = 'ender-schedule';
   const HOUR_PX = 46;
+  const HISTORY_WEEKS = 26;   // kept in the state
+  const HISTORY_SHOWN = 8;    // drawn on the page
 
   /* ---------- time helpers: everything is minutes since midnight ---------- */
 
@@ -67,7 +69,28 @@
 
   /* ---------- state ---------- */
 
-  const blank = () => ({ v: 2, week: isoWeek(new Date()), type: 'normal', slots: {}, done: {}, savedAt: 0 });
+  const blank = () => ({ v: 3, week: isoWeek(new Date()), type: 'normal',
+                         slots: {}, done: {}, history: [], savedAt: 0 });
+
+  /* v2 had no history, so migrating is just defaulting it to empty. Entries
+     are validated the same way everything else is: anything unrecognised is
+     dropped rather than trusted. */
+  function normHistory(h) {
+    if (!Array.isArray(h)) return [];
+    const out = [];
+    h.forEach((e) => {
+      if (!e || typeof e !== 'object' || typeof e.week !== 'string') return;
+      const meters = {};
+      if (e.meters && typeof e.meters === 'object') {
+        Object.keys(e.meters).forEach((k) => {
+          const v = e.meters[k];
+          if (Array.isArray(v) && v.length === 2) meters[k] = [Number(v[0]) || 0, Number(v[1]) || 0];
+        });
+      }
+      out.push({ week: e.week, type: typeof e.type === 'string' ? e.type : '', meters });
+    });
+    return out.slice(-HISTORY_WEEKS);
+  }
 
   function normalize(s) {
     if (!s || typeof s !== 'object') return blank();
@@ -87,6 +110,7 @@
         if (BY_ID[k] && BY_ID[k].tickable && s.done[k]) out.done[k] = true;
       });
     }
+    out.history = normHistory(s.history);
     out.savedAt = Number(s.savedAt) || 0;
     return out;
   }
@@ -96,6 +120,11 @@
   function rollWeek(s) {
     const now = isoWeek(new Date());
     if (s.week === now) return false;
+    /* Keep what the week that just ended came to. Guarded on savedAt so a
+       state that was never saved cannot file a week of zeroes. */
+    if (s.savedAt > 0) {
+      s.history = normHistory((s.history || []).concat([snapshot(s)]));
+    }
     s.week = now;
     s.done = {};
     s.type = 'normal';
@@ -125,7 +154,11 @@
     const s = normalize(incoming);
     if (s.savedAt <= state.savedAt) return false;
     state = s;
-    rollWeek(state);
+    /* Adopting a state from an earlier week rolls it here, which is a real
+       change: the ticks are cleared and the finished week is filed into
+       history. Nothing else would ever send that, so every device would roll
+       the same week over and over and keep its own private history. */
+    if (rollWeek(state)) needsRollSave = true;
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
     return true;
   }
@@ -189,7 +222,10 @@
 
   /* ---------- counts ---------- */
 
-  function counts() {
+  /* Defaults to the live state, but takes one explicitly so a week can still
+     be counted at the moment it rolls, before its ticks are cleared. */
+  function counts(s) {
+    s = s || state;
     const c = {};
     const bump = (k, done) => {
       if (!c[k]) c[k] = { planned: 0, done: 0 };
@@ -200,15 +236,31 @@
     c.gym = { planned: 0, done: 0 };
     SCHEDULE.habitMeters.forEach((m) => { c[m.track] = { planned: 0, done: 0 }; });
 
-    forWeek().forEach((b) => {
+    BLOCKS.filter((b) => b.weeks.indexOf(s.type) >= 0).forEach((b) => {
       if (b.kind === 'deep') {
-        const cat = state.slots[b.id];
-        if (cat && c[cat]) bump(cat, state.done[b.id]);
+        const cat = s.slots[b.id];
+        if (cat && c[cat]) bump(cat, s.done[b.id]);
       } else if (b.track) {
-        bump(b.track, state.done[b.id]);
+        bump(b.track, s.done[b.id]);
       }
     });
     return c;
+  }
+
+  /* What a finished week came to, as [done, target] per meter. Targets are
+     stored alongside, not looked up later: schedule.js changes between
+     semesters and a past week should keep the target it was actually judged
+     against. */
+  function snapshot(s) {
+    const c = counts(s);
+    const t = (SCHEDULE.weeks[s.type] || { targets: {} }).targets;
+    const meters = {};
+    Object.keys(CATS).forEach((k) => { meters[k] = [c[k].done, t[k] || 0]; });
+    meters.gym = [c.gym.done, t.gym || 0];
+    /* Habit meters have no target of their own: doing all the ones on the
+       timetable is the target. */
+    SCHEDULE.habitMeters.forEach((m) => { meters[m.track] = [c[m.track].done, c[m.track].planned]; });
+    return { week: s.week, type: s.type, meters };
   }
 
   /* ---------- rendering helpers ---------- */
@@ -246,6 +298,39 @@
     h += meterHTML('Gym', 'var(--gym)', t.gym, c.gym, false);
     SCHEDULE.habitMeters.forEach((m) => { h += meterHTML(m.label, 'var(--ink)', c[m.track].planned, c[m.track], false); });
     return h + '</section>';
+  }
+
+  /* Past weeks, one row per meter, so the question it answers is the one you
+     actually ask: not "what did week 37 look like" but "have I been going to
+     the gym". */
+  function historyHTML() {
+    const weeks = state.history.slice(-HISTORY_SHOWN);
+    if (!weeks.length) return '';
+
+    const rows = [];
+    Object.keys(CATS).forEach((k) => rows.push([k, CATS[k].label, CATS[k].color]));
+    rows.push(['gym', 'Gym', 'var(--gym)']);
+    SCHEDULE.habitMeters.forEach((m) => rows.push([m.track, m.label, 'var(--ink)']));
+
+    let h = `<section class="history" aria-label="Recent weeks"><h2>Recent weeks</h2>`;
+    rows.forEach(([key, label, color]) => {
+      let cells = '';
+      weeks.forEach((w) => {
+        const m = w.meters[key];
+        const done = m ? m[0] : 0;
+        const target = m ? m[1] : 0;
+        const cls = !m || !target ? 'none' : done >= target ? 'met' : done ? 'part' : 'miss';
+        const week = w.week.replace(/^\d+-/, '');
+        cells += `<span class="hcell ${cls}" title="${esc(week + ' · ' + done + ' of ' + target)}"></span>`;
+      });
+      const last = weeks[weeks.length - 1].meters[key];
+      h += `<div class="hrow" style="--c:${color}"><span class="hname">${esc(label)}</span>
+        <span class="hcells" role="img" aria-label="${esc(label + ', last ' + weeks.length + ' weeks')}">${cells}</span>
+        <span class="hlast">${last ? last[0] + '/' + last[1] : '–'}</span></div>`;
+    });
+    const span = weeks.length === 1 ? weeks[0].week.replace(/^\d+-/, '')
+      : weeks[0].week.replace(/^\d+-/, '') + '–' + weeks[weeks.length - 1].week.replace(/^\d+-/, '');
+    return h + `<p class="hfoot">${esc(span)}, oldest first. Last column is the most recent week.</p></section>`;
   }
 
   /* ---------- Today view ---------- */
@@ -327,7 +412,7 @@
       h += '<section class="rows earlier"><h2>Earlier today</h2>' + earlier.map((b) => rowHTML(b, now)).join('') + '</section>';
     }
     if (!today.length) h += '<section class="rows"><p class="empty">Nothing scheduled today.</p></section>';
-    return h + metersHTML();
+    return h + metersHTML() + historyHTML();
   }
 
   /* ---------- Week view ---------- */
@@ -381,7 +466,7 @@
       }
       h += '</div>';
     }
-    return h + '</div></div>';
+    return h + '</div></div>' + historyHTML();
   }
 
   /* ---------- shell ---------- */

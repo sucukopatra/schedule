@@ -103,11 +103,17 @@ the only thing that makes a check worth having.
       container healthy. Still to do: install it on the phone — *Add to Home
       Screen* in Safari, the install prompt in Android Chrome. Firefox on the
       desktop does not install PWAs, so that part cannot be checked here.
-- [ ] **Keep history.** `rollWeek()` wipes `done` and nothing survives, so the
-      app cannot answer "did I hit gym 3× this month?". Append
-      `{week, type, counts}` to a `history` array capped at ~26 weeks before
-      clearing; show a strip of past weeks under the meters. Needs `v: 3` and a
-      migration in `normalize()`.
+- [x] **Keep history.** Done 2026-09-20. `rollWeek()` files the finished week
+      into `history` before clearing the ticks, `[done, target]` per meter,
+      capped at 26 and drawn eight at a time under the meters as one row per
+      meter — so the strip answers "have I been going to the gym", not "what
+      did week 37 look like". `v: 3`; migrating from v2 is just defaulting
+      `history` to empty, since v2 never recorded any.
+      Building it turned up a bug of its own: a roll that happens inside
+      `adopt()` was applied but never saved, so each device would have rolled
+      the same week over and over and kept its own private history. Caught by
+      the new sync cases, not by eye.
+      Checked at phone and desktop width, light and dark, both views.
 - [ ] **Close the loop on deep sessions.** The meters say "Coursework 1 of 3"
       but never connect that to the two unassigned slots sitting on Wednesday
       and Saturday. One line under the meters: "3 open sessions left · 2
