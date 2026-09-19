@@ -59,6 +59,9 @@
   });
   BLOCKS.sort((a, b) => a.d - b.d || a.s - b.s || a.e - b.e);
 
+  const BY_ID = {};
+  BLOCKS.forEach((b) => { BY_ID[b.id] = b; });
+
   const forWeek = () => BLOCKS.filter((b) => b.weeks.indexOf(state.type) >= 0);
   const forDay = (d) => forWeek().filter((b) => b.d === d);
 
@@ -71,8 +74,19 @@
     const out = blank();
     if (WEEK_TYPES.indexOf(s.type) >= 0) out.type = s.type;
     if (typeof s.week === 'string') out.week = s.week;
-    if (s.slots && typeof s.slots === 'object') out.slots = s.slots;
-    if (s.done && typeof s.done === 'object') out.done = s.done;
+    /* Keep only what still refers to a real block. Moving a block in
+       schedule.js changes its id, and without this the orphaned key stays in
+       the state for good. */
+    if (s.slots && typeof s.slots === 'object') {
+      Object.keys(s.slots).forEach((k) => {
+        if (BY_ID[k] && BY_ID[k].kind === 'deep' && CATS[s.slots[k]]) out.slots[k] = s.slots[k];
+      });
+    }
+    if (s.done && typeof s.done === 'object') {
+      Object.keys(s.done).forEach((k) => {
+        if (BY_ID[k] && BY_ID[k].tickable && s.done[k]) out.done[k] = true;
+      });
+    }
     out.savedAt = Number(s.savedAt) || 0;
     return out;
   }
@@ -126,9 +140,14 @@
       })
       .then((s) => {
         if (adopt(s) && !dialogOpen) render();
+        if (needsRollSave) { needsRollSave = false; save(); return; }
+        /* Anything ticked while the server was unreachable is still only on
+           this device: save() skips the push when serverOk is false, and
+           adopt() has just turned down the server's older copy. Nothing else
+           ever retries, so without this the work sits here under a status line
+           claiming "Synced" until another device saves and quietly wins. */
+        if (state.savedAt > (s ? Number(s.savedAt) || 0 : 0)) { push(); return; }
         setStatus('Synced');
-        if (s === null && state.savedAt > 0) push();
-        if (needsRollSave) { needsRollSave = false; save(); }
       })
       .catch(() => { serverOk = false; setStatus('Offline, saving on this device'); });
   }
@@ -289,10 +308,18 @@
     const now = d.getHours() * 60 + d.getMinutes();
     const today = forDay(di);
     const current = currentBlock(today, now);
-    const later = today.filter((b) => b.e > now && b !== current);
+    /* Every block lands in exactly one of these. A block that has started but
+       did not win the Now card -- a trip running under everything else -- is
+       still running, and listing it as upcoming showed a start time that had
+       already passed. */
+    const running = today.filter((b) => b.s <= now && b.e > now && b !== current);
+    const later = today.filter((b) => b.s > now);
     const earlier = today.filter((b) => b.e <= now);
 
     let h = nowCardHTML(today, now, current);
+    if (running.length) {
+      h += '<section class="rows"><h2>Also on now</h2>' + running.map((b) => rowHTML(b, now)).join('') + '</section>';
+    }
     if (later.length) {
       h += '<section class="rows"><h2>Still to come</h2>' + later.map((b) => rowHTML(b, now)).join('') + '</section>';
     }
@@ -412,7 +439,7 @@
   }
 
   function openDeep(id) {
-    const b = BLOCKS.find((x) => x.id === id);
+    const b = BY_ID[id];
     const picked = state.slots[id] || '';
     const done = !!state.done[id];
     const dlg = document.getElementById('dlg');

@@ -5,9 +5,11 @@ section; tick things off as they land.
 
 ## Bugs
 
-### Round 2, found 2026-09-19 by audit — open
+### Round 2, found and fixed 2026-09-19 by audit
 
-- [ ] **Offline edits are never pushed back.** *The serious one.* `pull()` only
+Not yet deployed to bmo.
+
+- [x] **Offline edits are never pushed back.** *The serious one.* `pull()` only
       pushes when the server has **no** state at all (`s === null`). If the
       server holds an *older* state, `adopt()` returns false, nothing is
       pushed, and the status line says **"Synced"** — while the work sits on
@@ -18,28 +20,37 @@ section; tick things off as they land.
       `savedAt` — the offline work is gone.
       Shipping the PWA is what made this reachable; before it, the page could
       not load offline at all, so there were no offline edits to lose.
-      Fix: in `pull()`, push whenever `state.savedAt` is ahead of the server's,
-      and stop claiming "Synced" when it is.
-- [ ] **A long filename crashes the request.** `static_file` lets any bare name
+      Fixed: `pull()` now pushes whenever `state.savedAt` is ahead of the
+      server's, whatever the server holds, and only says "Synced" when it
+      really is. Re-ran the shim across seven scenarios, including the two that
+      must stay quiet — a fresh page with nothing ticked still writes no
+      `state.json`.
+- [x] **A long filename crashes the request.** `static_file` lets any bare name
       through, so `GET /aaaa…400 chars….js` reaches `open()` and raises
       `OSError: [Errno 36] File name too long`, which nothing catches: the
       connection closes with no HTTP response at all, not even a 500.
       Introduced by the `TYPES` change — the old fixed allowlist could never
-      reach `open()` with an arbitrary name. Catch `OSError`, not just
-      `FileNotFoundError` and `IsADirectoryError`.
-- [ ] **A non-numeric Content-Length crashes the request.** `int(...)` in
+      reach `open()` with an arbitrary name. Fixed by catching `OSError`, which
+      covers missing, is-a-directory and too-long alike. Now a 404.
+- [x] **A non-numeric Content-Length crashes the request.** `int(...)` in
       `do_PUT` raises `ValueError` and the client gets no reply. Pre-existing.
-      Should be a 400.
-- [ ] **A running block that is not `current` is listed under "Still to
+      Now a 400.
+- [x] **A running block that is not `current` is listed under "Still to
       come".** `later` is `b.e > now && b !== current`, so with two overlapping
       blocks the one that did not win `currentBlock` shows as upcoming with a
       start time in the past. Latent: a check of every week type found zero
       overlaps in today's `schedule.js`, but trips are the designed overlap and
-      one long block plus anything else brings it out.
-- [ ] **`slots` accumulates orphans.** `normalize()` copies `slots` wholesale
+      one long block plus anything else brings it out. Fixed by partitioning
+      the day into current / also-running / later / earlier, so every block
+      lands in exactly one place; the running ones get an "Also on now"
+      heading.
+- [x] **`slots` accumulates orphans.** `normalize()` copies `slots` wholesale
       and `rollWeek()` keeps it, so a slot key whose block was moved or deleted
-      in `schedule.js` stays in the state for good. Harmless but unbounded;
-      prune to the current block ids on load.
+      in `schedule.js` stays in the state for good. Harmless but unbounded.
+      Fixed: `normalize()` keeps only keys that still name a real block of the
+      right kind, and only categories that exist. Did not need the `v: 3` bump
+      after all — it validates the same shape more strictly rather than
+      changing it.
 
 ### Round 1, fixed 2026-09-19
 

@@ -104,14 +104,18 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 with open(os.path.join(WEB_DIR, hit[0]), "rb") as f:
                     return self.send(200, f.read(), hit[1])
-            except (FileNotFoundError, IsADirectoryError):
+            except OSError:
+                # Missing, a directory, too long a name -- all just "not here".
                 return self.error(404, "not found")
         self.error(404, "not found")
 
     def do_PUT(self):
         if self.path.split("?", 1)[0] != "/api/state":
             return self.error(404, "not found")
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return self.error(400, "Content-Length is not a number")
         if length <= 0 or length > MAX_BODY:
             return self.error(413, "body must be between 1 byte and 64 KB")
         try:
