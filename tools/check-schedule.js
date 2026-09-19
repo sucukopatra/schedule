@@ -122,7 +122,33 @@ B.forEach((b) => {
   if (b.tickable && !b.track && b.kind !== 'deep') note(`tickable but counts toward nothing: ${b.id} (${b.title})`);
 });
 
+/* The term dates only feed schedule.ics, but a wrong one there is a calendar
+   full of wrong reminders. */
+const start = SCHEDULE.termStart;
+const end = SCHEDULE.termEnd;
+const isDate = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(Date.parse(d));
+if (!isDate(start)) err('termStart is not a YYYY-MM-DD date:', JSON.stringify(start));
+if (!isDate(end)) err('termEnd is not a YYYY-MM-DD date:', JSON.stringify(end));
+if (isDate(start) && isDate(end)) {
+  if (Date.parse(start) >= Date.parse(end)) err('termStart is not before termEnd');
+  else if (Date.parse(end) < Date.now()) note(`the term ended on ${end}; schedule.ics has nothing left in it`);
+}
+Object.keys(SCHEDULE.alarms || {}).forEach((k) => {
+  if (KINDS.indexOf(k) < 0) err('alarms names an unknown kind:', k);
+  else if (!(SCHEDULE.alarms[k] > 0)) err(`alarms.${k} is not a positive number of minutes`);
+});
+
 notes.forEach((m) => console.log('  note:', m));
 errors.forEach((m) => console.log('  ERROR:', m));
 console.log(errors.length ? `\n${errors.length} error(s) in schedule.js` : `\nschedule.js is clean (${B.length} blocks)`);
-process.exit(errors.length ? 1 : 0);
+if (errors.length) process.exit(1);
+
+/* schedule.ics is generated from this file and goes stale the moment it
+   changes, so the deploy checks are where that gets caught. */
+if (!process.argv[2]) {
+  const r = require('child_process').spawnSync(process.execPath,
+    [require('path').join(__dirname, 'make-ics.js'), '--check'], { encoding: 'utf8' });
+  process.stdout.write(r.stdout || '');
+  if (r.status !== 0) process.exit(1);
+}
+process.exit(0);

@@ -32,6 +32,16 @@ var SCHEDULE = {
   wake:      { weekday: '07:30', weekend: '08:30' },
   lightsOut: '23:30',
 
+  /* The term's first and last day, used only to generate schedule.ics — the
+     page itself does not care. Both are inclusive, YYYY-MM-DD. */
+  termStart: '2026-09-14',
+  termEnd:   '2027-01-09',
+
+  /* Minutes of warning in the calendar feed, by kind. A kind that is not
+     listed gets no alarm, which is why habit is absent: a reminder to eat
+     breakfast with your German is not a reminder anyone needs. */
+  alarms: { class: 30, gym: 15, deep: 10, review: 10, trip: 60 },
+
   /* isoWeeks: the weeks this type takes over, as ISO week strings. The type is
      set when the week rolls over on Monday; the buttons in the header still
      override it for the rest of that week. A week no type claims is normal, so

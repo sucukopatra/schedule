@@ -24,6 +24,7 @@ TYPES = {
     ".js": "text/javascript",
     ".json": "application/json",
     ".webmanifest": "application/manifest+json",
+    ".ics": "text/calendar",
     ".svg": "image/svg+xml",
     ".png": "image/png",
     ".ico": "image/x-icon",

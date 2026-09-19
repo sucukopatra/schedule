@@ -26,9 +26,12 @@ put()  { curl -s -o /dev/null -w '%{http_code}' -X PUT -H 'Content-Type: applica
            --max-time 10 -d "$1" "http://127.0.0.1:$PORT/api/state"; }
 
 echo "serving"
-for f in / /index.html /style.css /schedule.js /app.js /sw.js /manifest.webmanifest /icon.svg /icon-192.png /apple-touch-icon.png /healthz; do
+for f in / /index.html /style.css /schedule.js /app.js /sw.js /manifest.webmanifest /icon.svg /icon-192.png /apple-touch-icon.png /schedule.ics /healthz; do
   check "GET $f" 200 "$(code $f)"
 done
+ctype() { curl -s -o /dev/null -w '%{content_type}' --max-time 10 "http://127.0.0.1:$PORT$1"; }
+check "GET /schedule.ics is text/calendar" "text/calendar; charset=utf-8" "$(ctype /schedule.ics)"
+check "GET /icon-192.png claims no charset" "image/png" "$(ctype /icon-192.png)"
 
 echo "refusing"
 check "GET /api/state before any save"    404 "$(code /api/state)"

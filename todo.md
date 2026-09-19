@@ -131,10 +131,17 @@ or legible. For that, render a state through it, drop the HTML next to the real
       instead of letting it be discovered on Sunday.
       `tools/check-plan.js` pins every branch and both fill cases, including
       that whatever the fill produces actually adds up.
-- [ ] **Notifications** ("Gym in 15 minutes"), now that the PWA exists. Needs
-      the page installed on the phone first, and a decision about scheduling:
-      there is no server push here, so it is either a one-shot timer while the
-      page is open or the Notification Triggers API where it exists.
+- [x] **Notifications**, done 2026-09-20 — as a calendar feed, not as push.
+      A page cannot wake itself, a backgrounded PWA is suspended, and the
+      Notification Triggers API never shipped past an origin trial. Push would
+      have meant VAPID and payload encryption, neither in the standard library,
+      plus a scheduler on bmo. So `schedule.ics` is generated from
+      `schedule.js` and the phone's own calendar does the reminding: native,
+      and the alarms fire with the phone off the network entirely.
+      The catch worth remembering: Google Calendar's "from URL" makes *Google's
+      servers* fetch, and they cannot reach a host with no public DNS. iOS
+      fetches from the phone, so it works over Tailscale. On Android it needs a
+      client that fetches locally, like ICSx⁵.
 
 ## Smaller
 

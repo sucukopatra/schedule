@@ -133,6 +133,55 @@ A service worker needs a secure context. `https://schedule.domatesis.com` and
 `http://localhost` both qualify; opening `index.html` off disk does not, so
 registration just fails there and the page carries on with localStorage.
 
+### Reminders: the calendar feed
+
+The page cannot tell you "gym in 15 minutes". A web page cannot wake itself,
+a backgrounded PWA is suspended, and the API that would have fixed that never
+shipped past an origin trial. Real push would mean VAPID signing and payload
+encryption, neither of which is in the standard library, plus something on bmo
+deciding when to fire.
+
+So the phone's own calendar does the reminding instead. `schedule.ics` is a
+subscribable calendar generated from `schedule.js`:
+
+```bash
+node tools/make-ics.js           # regenerate after editing the timetable
+node tools/make-ics.js --check   # exit 1 if it is out of date
+```
+
+Like the icons it is generated and committed rather than built on the way out —
+but unlike the icons it goes stale every time the timetable changes, so
+`check-schedule.js` runs `--check` and the pre-deploy checks catch it.
+
+- Lead times come from `SCHEDULE.alarms`, keyed by kind. A kind that is not
+  listed gets no alarm, which is why `habit` is absent.
+- Times are **floating**: no `TZID`, no `VTIMEZONE`, no offsets. "09:00" means
+  nine o'clock wherever the phone is, which is what a class timetable means and
+  leaves no DST arithmetic to get wrong.
+- The range comes from `termStart` and `termEnd`. Each block becomes one
+  weekly `VEVENT`; weeks where a block does not apply become `EXDATE`s, so once
+  `isoWeeks` names your trip weeks the calendar follows. A block that applies
+  to no week in the term is left out entirely — with no trip weeks declared,
+  the five trip-only blocks produce no events.
+- `UID`s are the same stable ids the page uses, so re-subscribing updates
+  events rather than duplicating them.
+
+**Subscribing depends on who does the fetching**, and this is where it gets
+counter-intuitive. The site has no public DNS and is reachable only over the
+LAN or Tailscale:
+
+- **iOS** fetches subscribed calendars *from the phone*, so it works: Settings
+  → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar, then
+  `https://schedule.domatesis.com/schedule.ics`. The phone has to be on
+  Tailscale or the LAN when it refreshes.
+- **Google Calendar cannot do this.** "From URL" makes *Google's servers*
+  fetch, and they cannot reach a private host. It will fail, and the failure
+  looks like nothing happening. On Android use a client that fetches from the
+  device, such as ICSx⁵, pointed at the same URL.
+
+Once events have synced, the alarms are local: they fire with the phone off the
+network entirely. Only picking up *changes* needs Tailscale.
+
 ### Views
 
 - **Today** is the default, and the reason to open the page at all: a card for
@@ -364,7 +413,7 @@ They live outside `app/`, so they are never deployed. Run them before a deploy;
 each exits non-zero on a failure.
 
 ```bash
-node tools/check-schedule.js   # invariants for the hand-edited timetable
+node tools/check-schedule.js   # invariants, and that schedule.ics is current
 node tools/check-sync.js       # load -> pull -> push, against a fake server
 node tools/check-plan.js       # the plan line and Fill to targets
 tools/check-server.sh          # the HTTP contract, on a throwaway DATA_DIR
