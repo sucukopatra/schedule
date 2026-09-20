@@ -176,11 +176,51 @@ LAN or Tailscale:
   Tailscale or the LAN when it refreshes.
 - **Google Calendar cannot do this.** "From URL" makes *Google's servers*
   fetch, and they cannot reach a private host. It will fail, and the failure
-  looks like nothing happening. On Android use a client that fetches from the
-  device, such as ICSx⁵, pointed at the same URL.
+  looks like nothing happening.
+- **Android** has no subscribe-from-the-device support of its own. Either an
+  app that fetches locally, such as ICSx⁵, or the CalDAV route below.
 
 Once events have synced, the alarms are local: they fire with the phone off the
 network entirely. Only picking up *changes* needs Tailscale.
+
+### The CalDAV route: pushing into Radicale
+
+The phone here is GrapheneOS running Fossify Calendar, synced by DAVx⁵ against
+Radicale at `dav.domatesis.com`. That sync path already works, so the timetable
+rides it instead of adding a second one -- and the phone then only ever needs to
+reach `dav.domatesis.com`, never `schedule.domatesis.com`.
+
+**Radicale's `webcal` collection type is not the way to do this**, which is not
+obvious and costs an hour if you assume otherwise. It does not mirror the feed:
+it stores the URL as `CS:source` with `tag: VSUBSCRIBED` in `.Radicale.props`
+and leaves the fetching to the client. So the collection sits at zero items, and
+DAVx⁵ refuses it with *no compatible calendar app* because it wants to hand the
+URL off to ICSx⁵. Make the collection an ordinary **Calendar** and push to it:
+
+```bash
+python3 tools/push-dav.py             # after make-ics.js, after the rsync
+python3 tools/push-dav.py --dry-run   # report, change nothing
+```
+
+- One resource per event, named from the UID (`gym-Mon-19-30-schedule....ics`),
+  so a re-run updates in place rather than duplicating.
+- **Deletion is scoped.** Anything in the collection missing from the feed is
+  removed, but only after fetching it and confirming its UID ends
+  `@schedule.domatesis.com`. An event added by hand survives, and pointing the
+  script at the wrong collection cannot quietly empty it. This is what a webcal
+  subscription would have given for free, and the reason moving a block does
+  not leave a ghost alarm behind.
+- Credentials come from `SCHEDULE_DAV_USER`/`SCHEDULE_DAV_PASS`, else `~/.netrc`
+  for the host, else a prompt. Never from the command line, which `ps` shows to
+  every process on the machine. `--url` or `SCHEDULE_DAV_URL` overrides the
+  collection.
+- The collection is created with `MKCALENDAR` if it is not there yet.
+
+On the phone, **Fossify hides CalDAV calendars until you turn them on**: Settings
+→ CalDAV sync, then tick the calendar. Reminders also need the *Alarms &
+reminders* permission and an exemption from battery optimisation, or they fire
+late or not at all. DAVx⁵ maps the feed's floating times to the device timezone,
+which is exactly what the timetable means by them.
 
 ### Views
 
