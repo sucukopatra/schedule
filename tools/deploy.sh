@@ -53,13 +53,14 @@ esac
 # Unconditional, because it is cheap and idempotent, and a deploy is exactly
 # when you are paying attention if it has anything to say.
 #
-# `docker exec -e VAR` with no value passes the variable through from the
-# calling shell, so the password is never an argument and never shows in ps.
+# The credentials come from /srv/docker/.env by way of the service definition,
+# the same as every other secret on that host; docker exec inherits the
+# container's environment, so nothing is passed or sourced here.
+#
 # A failed push is not a failed deploy: the page is already live.
-if ! ssh "$host" "set -a; . '$root/dav.env'; set +a; \
-      docker exec -e SCHEDULE_DAV_USER -e SCHEDULE_DAV_PASS schedule \
-        python /tools/push-dav.py \
-          --ics /app/web/schedule.ics \
-          --url http://radicale:5232/ender/schedule/"; then
+if ! ssh "$host" "docker exec schedule \
+      python /tools/push-dav.py \
+        --ics /app/web/schedule.ics \
+        --url http://radicale:5232/ender/schedule/"; then
   echo "Calendar push failed. The page is live; phone reminders are stale."
 fi

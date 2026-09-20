@@ -214,18 +214,28 @@ already on the `core` network and already mounts the feed, so no second service
 is needed:
 
 ```sh
-ssh bmo "set -a; . '$root/dav.env'; set +a; \
-  docker exec -e SCHEDULE_DAV_USER -e SCHEDULE_DAV_PASS schedule \
-    python /tools/push-dav.py \
-      --ics /app/web/schedule.ics \
-      --url http://radicale:5232/ender/schedule/"
+ssh bmo "docker exec schedule \
+  python /tools/push-dav.py \
+    --ics /app/web/schedule.ics \
+    --url http://radicale:5232/ender/schedule/"
 ```
 
-This needs one line added to the `schedule` service in `stacks/schedule.yml`:
+This needs three lines added to the existing `schedule` service in
+`stacks/schedule.yml`, and the two keys in `/srv/docker/.env` beside
+`QB_PASSWORD` and the API keys:
 
 ```yaml
+    environment:
+      - SCHEDULE_DAV_USER=${SCHEDULE_DAV_USER}
+      - SCHEDULE_DAV_PASS=${SCHEDULE_DAV_PASS}
+    volumes:
       - ${CONFIG}/caddy/webpages/schedule/tools:/tools:ro
 ```
+
+Heed the warning `sync.yml` carries about this block: **nothing in it may be
+quoted**, because compose's list syntax splits on the first `=` and keeps the
+quotes as part of the value. A `$` in the password needs doubling as `$$` for
+the same reason -- compose interpolates it otherwise.
 
 - **`radicale:5232`, not `dav.domatesis.com`.** The host cannot reach Radicale
   at all -- `sync.yml` uses `expose`, not `publish` -- but anything on `core`
@@ -238,10 +248,15 @@ This needs one line added to the `schedule` service in `stacks/schedule.yml`:
   backup -- stays wrong until the next deploy. Run `push-dav.py` by hand to fix
   that; a `--watch` mode that healed it on a timer was written and then removed
   as more machinery than the problem deserved (see `26f4739`).
-- **Credentials live on bmo**, in `dav.env` beside the app, mode 600. `docker
-  exec -e VAR` with no value passes it through from the calling shell, so the
-  password is never an argument and never appears in `ps`. The laptop holds
-  nothing the server needs.
+- **Credentials live on bmo**, in `/srv/docker/.env` with every other secret on
+  that host. `docker exec` inherits the container's environment, so the deploy
+  passes nothing and sources nothing, and the password never appears in `ps` or
+  in this repo. The laptop holds nothing the server needs. The trade is that
+  the web process carries the password in its environment too -- the same
+  posture as `QB_PASSWORD` in its container, and server.py serves files and one
+  JSON PUT, but it is a wider blast radius than a file read at exec time.
+- Changing the password means recreating the container, not just editing
+  `.env`: compose reads it at `up` time.
 - A failed push is reported but does not fail the deploy: the page is already
   live, only the reminders are stale.
 
