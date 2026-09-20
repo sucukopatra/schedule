@@ -183,7 +183,13 @@ LAN or Tailscale:
 Once events have synced, the alarms are local: they fire with the phone off the
 network entirely. Only picking up *changes* needs Tailscale.
 
-### The CalDAV route: pushing into Radicale
+### The CalDAV route: pushing into Radicale (experimental)
+
+**Experimental, and nothing depends on it.** It is not part of `schedule-deploy`,
+and the page and the `.ics` feed work whether or not it is ever run. The push
+half is tested -- against a throwaway Radicale 3.8.0, not against the real
+server -- and the phone half is not tested at all. Read the caveats at the end
+of this section before relying on it for a morning alarm.
 
 The phone here is GrapheneOS running Fossify Calendar, synced by DAVx⁵ against
 Radicale at `dav.domatesis.com`. That sync path already works, so the timetable
@@ -219,8 +225,24 @@ python3 tools/push-dav.py --dry-run   # report, change nothing
 On the phone, **Fossify hides CalDAV calendars until you turn them on**: Settings
 → CalDAV sync, then tick the calendar. Reminders also need the *Alarms &
 reminders* permission and an exemption from battery optimisation, or they fire
-late or not at all. DAVx⁵ maps the feed's floating times to the device timezone,
-which is exactly what the timetable means by them.
+late or not at all.
+
+**What is actually proven.** Against a throwaway Radicale 3.8.0: the collection
+is created, 46 events land one file each, a re-run reports `0 new, 46 updated`
+with no duplicates, a planted stale `gym-Thu-18:15` is deleted, a hand-added
+event is left alone, and `DTSTART`, `RRULE` and `VALARM` all round-trip with no
+`TZID` injected. Aimed at a collection holding three unrelated events it deleted
+none of them -- but it did add its own 46, taking that collection to 49 items.
+It cannot destroy anything; it can still make a mess. Hence `--dry-run`.
+
+**What is not proven.** The real server behind Caddy and TLS, where a `[rights]`
+section may refuse `MKCALENDAR` -- if it does, create the collection by hand as
+type *Calendar* and re-run, since the script only creates one when `PROPFIND`
+returns 404. And everything downstream of Radicale: whether DAVx⁵ maps the
+feed's floating times onto the device timezone as intended is the one that
+matters, because getting it wrong puts every event an hour out rather than
+failing loudly. Check a single event on the phone against the page before
+trusting an alarm to it.
 
 ### Views
 
