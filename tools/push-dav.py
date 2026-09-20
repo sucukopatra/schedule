@@ -17,6 +17,13 @@ nothing, but it does add 46 events you would then clear out by hand.
     python3 tools/push-dav.py                 # push, using $SCHEDULE_DAV_* or ~/.netrc
     python3 tools/push-dav.py --dry-run       # say what would change, touch nothing
     python3 tools/push-dav.py --url URL       # a collection other than the default
+    python3 tools/push-dav.py --watch         # stay up, push whenever the .ics changes
+
+--watch is how this runs on bmo, as a sidecar beside the web server: it hashes
+the deployed schedule.ics every --poll seconds and pushes when the bytes change,
+plus an unconditional pass every --heal seconds to repair a collection that
+drifted. That is what keeps the calendar working when the laptop is not there --
+the laptop only ever rsyncs; nothing recurring depends on it.
 
 Radicale's `webcal` collection type does NOT mirror a feed -- it stores the
 source URL as CS:source and expects the *client* to fetch it, which is why such
@@ -36,10 +43,12 @@ Stdlib only: no pip, matching the rest of tools/.
 import argparse
 import base64
 import getpass
+import hashlib
 import netrc
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -52,9 +61,19 @@ ICS = Path(__file__).resolve().parent.parent / 'app' / 'web' / 'schedule.ics'
 DAV = '{DAV:}'
 
 
+class DavError(Exception):
+    """Raised rather than exiting, so --watch survives a server that is down or
+    a network that is not there yet and tries again on the next pass."""
+
+
 def die(msg):
-    print(f'  ERROR: {msg}', file=sys.stderr)
-    sys.exit(1)
+    raise DavError(msg)
+
+
+def say(msg):
+    """Timestamped, because in --watch these lines are container logs and an
+    undated one tells you nothing six weeks later."""
+    print(f'[{time.strftime("%Y-%m-%d %H:%M:%S")}] {msg}', flush=True)
 
 
 # --- the feed ---------------------------------------------------------------
@@ -212,29 +231,16 @@ def credentials(url):
 
 # --- main -------------------------------------------------------------------
 
-def main():
-    ap = argparse.ArgumentParser(description='Push schedule.ics into a CalDAV collection.')
-    ap.add_argument('--url', default=os.environ.get('SCHEDULE_DAV_URL', DEFAULT_URL))
-    ap.add_argument('--dry-run', action='store_true', help='report, change nothing')
-    ap.add_argument('--title', default='Fall 2026', help='display name if the collection must be created')
-    args = ap.parse_args()
-
-    if not ICS.exists():
-        die(f'{ICS} is missing -- run: node tools/make-ics.js')
-    want = split_events(ICS.read_bytes().decode('utf-8'))
-    print(f'{ICS.name}: {len(want)} events')
-
-    user, password, source = credentials(args.url)
-    auth = base64.b64encode(f'{user}:{password}'.encode('utf-8')).decode('ascii')
-    dav = Dav(args.url, auth, args.dry_run)
-    print(f'{dav.url}  (as {user}, credentials from {source})')
-    if args.dry_run:
-        print('dry run: nothing will be written')
+def sync_once(dav, ics, title, quiet=False):
+    """One full pass. Returns the summary line."""
+    if not ics.exists():
+        die(f'{ics} is missing -- run: node tools/make-ics.js')
+    want = split_events(ics.read_bytes().decode('utf-8'))
 
     have = dav.listing()
     if have is None:
-        print(f'  collection does not exist -- creating it as "{args.title}"')
-        dav.mkcalendar(args.title)
+        say(f'collection does not exist -- creating it as "{title}"')
+        dav.mkcalendar(title)
         have = {}
 
     added = updated = 0
@@ -250,17 +256,97 @@ def main():
         if name in want:
             continue
         if dav.is_ours(href):
-            print(f'  {dav.delete(href)}: {name}')
+            note = dav.delete(href)
             removed += 1
         else:
-            print(f'  left alone (not ours): {name}')
+            note = 'left alone (not ours)'
             kept += 1
+        if not quiet:
+            say(f'  {note}: {name}')
 
-    verb = 'would be' if args.dry_run else 'were'
-    print(f'\n{added} new, {updated} updated, {removed} removed'
-          + (f', {kept} left alone' if kept else '')
-          + f' -- {len(want)} events {verb} in the collection')
+    verb = 'would be' if dav.dry_run else 'were'
+    return (f'{added} new, {updated} updated, {removed} removed'
+            + (f', {kept} left alone' if kept else '')
+            + f' -- {len(want)} events {verb} in the collection')
+
+
+def digest(path):
+    """Content hash, not mtime: rsync rewrites the file on every deploy, and a
+    byte-identical .ics is not a reason to talk to the server."""
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def watch(dav, ics, title, poll, heal):
+    say(f'watching {ics} every {poll}s, healing every {heal}s')
+    seen, last_heal = None, 0.0
+    while True:
+        now = time.monotonic()
+        current = digest(ics)
+        why = None
+        if current is None:
+            why = None  # the file is not there yet; say nothing and wait
+        elif current != seen:
+            why = 'changed' if seen is not None else 'startup'
+        elif now - last_heal >= heal:
+            why = 'heal'
+        if why:
+            try:
+                say(f'{ics.name} {why}: ' + sync_once(dav, ics, title, quiet=(why == 'heal')))
+                seen, last_heal = current, now
+            except DavError as e:
+                # Do not advance `seen`: a failed pass must be retried, not
+                # counted as done. restart: unless-stopped would paper over
+                # this by bouncing the container; retrying in place is quieter.
+                say(f'  ERROR: {e} -- retrying in {poll}s')
+        time.sleep(poll)
+
+
+def main():
+    ap = argparse.ArgumentParser(description='Push schedule.ics into a CalDAV collection.')
+    ap.add_argument('--url', default=os.environ.get('SCHEDULE_DAV_URL', DEFAULT_URL))
+    ap.add_argument('--ics', default=os.environ.get('SCHEDULE_ICS'), metavar='PATH',
+                    help='the feed to push (default: app/web/schedule.ics beside this script)')
+    ap.add_argument('--dry-run', action='store_true', help='report, change nothing')
+    ap.add_argument('--title', default='Fall 2026', help='display name if the collection must be created')
+    ap.add_argument('--watch', action='store_true', help='stay up and push whenever the feed changes')
+    ap.add_argument('--poll', type=int, default=60, metavar='SECONDS')
+    ap.add_argument('--heal', type=int, default=6 * 3600, metavar='SECONDS',
+                    help='push unconditionally this often, to repair a drifted collection')
+    args = ap.parse_args()
+
+    ics = Path(args.ics).resolve() if args.ics else ICS
+    try:
+        user, password, source = credentials(args.url)
+    except DavError as e:
+        print(f'  ERROR: {e}', file=sys.stderr)
+        return 1
+    auth = base64.b64encode(f'{user}:{password}'.encode('utf-8')).decode('ascii')
+    dav = Dav(args.url, auth, args.dry_run)
+    say(f'{dav.url}  (as {user}, credentials from {source})')
+    if args.dry_run:
+        say('dry run: nothing will be written')
+
+    if args.watch:
+        if args.dry_run:
+            print('  ERROR: --watch and --dry-run together would spin doing nothing',
+                  file=sys.stderr)
+            return 2
+        try:
+            watch(dav, ics, args.title, args.poll, args.heal)
+        except KeyboardInterrupt:
+            say('stopped')
+        return 0
+
+    try:
+        say(sync_once(dav, ics, args.title))
+    except DavError as e:
+        print(f'  ERROR: {e}', file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

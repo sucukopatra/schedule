@@ -208,10 +208,48 @@ python3 tools/push-dav.py             # after make-ics.js, after the rsync
 python3 tools/push-dav.py --dry-run   # report, change nothing
 ```
 
-Once set up this is not run by hand: `schedule-deploy` calls it, so editing
-`schedule.js` and deploying is the whole workflow and the phone follows. The
-one-time setup is a `Calendar` collection at `/ender/schedule/`, a `~/.netrc`
-entry for `dav.domatesis.com`, and enabling the calendar in DAVx⁵ and Fossify.
+Once set up this is not run by hand at all, and not from the laptop. A sidecar
+container on bmo runs it in `--watch` mode: it hashes the deployed
+`schedule.ics` every 60s, pushes when the bytes change, and pushes
+unconditionally every six hours to repair a collection that drifted. So the
+laptop only ever rsyncs, and the calendar keeps working if the laptop is
+reinstalled, lost, or simply off.
+
+```yaml
+  # in stacks/schedule.yml, beside the schedule service
+  schedule-calendar:
+    image: python:3.12-alpine
+    container_name: schedule-calendar
+    restart: unless-stopped
+    user: "1000:1000"
+    command: ["python", "-u", "/tools/push-dav.py", "--watch",
+              "--ics", "/app/web/schedule.ics",
+              "--url", "http://radicale:5232/ender/schedule/"]
+    environment:
+      - SCHEDULE_DAV_USER=ender
+      - SCHEDULE_DAV_PASS=${RADICALE_SCHEDULE_PASS}
+    volumes:
+      - ${CONFIG}/caddy/webpages/schedule/app:/app:ro
+      - ${CONFIG}/caddy/webpages/schedule/tools:/tools:ro
+    networks:
+      - core
+```
+
+- It reaches Radicale as `radicale:5232` **on the `core` network**, not through
+  `dav.domatesis.com`. No TLS, no public DNS, no Caddy in the path — one fewer
+  thing that can be down when the calendar wants updating.
+- Both mounts are `:ro`. The sidecar can read the feed and the script; it can
+  write to neither.
+- The password comes from `RADICALE_SCHEDULE_PASS` in `/srv/docker/.env`, the
+  same way `VAULTWARDEN_ADMIN_TOKEN` does. It is not in the compose file and
+  not in this repo.
+- A failed pass is logged and retried on the next poll rather than crashing the
+  container, so an unreachable Radicale produces a line a minute and recovers
+  by itself. `docker logs schedule-calendar` is where to look.
+
+The one-time setup is a `Calendar` collection at `/ender/schedule/`, the `.env`
+entry, and enabling the calendar in DAVx⁵ and Fossify. A `~/.netrc` on the
+laptop is needed only if you want to run the push by hand.
 
 - One resource per event, named from the UID (`gym-Mon-19-30-schedule....ics`),
   so a re-run updates in place rather than duplicating.
@@ -388,8 +426,11 @@ what is actually wrong.
 
 ### The deploy itself
 
-Only `app/` is deployed. Nothing is built, locally or on the server — deploy is
-just an rsync of `app/` to bmo, with a shell function on the laptop:
+Nothing is built, locally or on the server. Deploy is `tools/deploy.sh`, which
+lives in this repo rather than in `~/.zshrc` so a reinstalled laptop needs only
+a clone. It rsyncs `app/`, which the container serves, and `tools/push-dav.py`,
+which the calendar sidecar runs; `data/` is never a target, so the ticks cannot
+be reached by a `--delete`. For reference, what it does:
 
 ```bash
 schedule-deploy() {
