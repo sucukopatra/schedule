@@ -208,6 +208,11 @@ python3 tools/push-dav.py             # after make-ics.js, after the rsync
 python3 tools/push-dav.py --dry-run   # report, change nothing
 ```
 
+Once set up this is not run by hand: `schedule-deploy` calls it, so editing
+`schedule.js` and deploying is the whole workflow and the phone follows. The
+one-time setup is a `Calendar` collection at `/ender/schedule/`, a `~/.netrc`
+entry for `dav.domatesis.com`, and enabling the calendar in DAVx⁵ and Fossify.
+
 - One resource per event, named from the UID (`gym-Mon-19-30-schedule....ics`),
   so a re-run updates in place rather than duplicating.
 - **Deletion is scoped.** Anything in the collection missing from the feed is
@@ -392,16 +397,29 @@ schedule-deploy() {
   local dest=bmo:/srv/docker/config/caddy/webpages/schedule/app/
   local out
   out=$(rsync -az --delete --itemize-changes "$src/app/" "$dest") || return 1
-  [[ -z "$out" ]] && { echo "Nothing changed."; return 0; }
-  echo "$out"
-  if grep -q 'server\.py' <<<"$out"; then
-    ssh bmo 'cd /srv/docker && docker compose up -d --force-recreate schedule' \
-      && echo "Recreated schedule (server.py changed)."
+  if [[ -z "$out" ]]; then
+    echo "Nothing changed."
+  else
+    echo "$out"
+    if grep -q 'server\.py' <<<"$out"; then
+      ssh bmo 'cd /srv/docker && docker compose up -d --force-recreate schedule' \
+        && echo "Recreated schedule (server.py changed)."
+    fi
   fi
+  # Keep the phone's calendar in step with what was just deployed.
+  python3 "$src/tools/push-dav.py" \
+    || echo "Calendar push failed. The page is live; phone reminders are stale."
 }
 ```
 
 - The rsync target is `app/` only, so `--delete` can never reach `data/`.
+- The calendar push runs **unconditionally**, including on a deploy that
+  changed nothing. It is idempotent, so that costs a few seconds and heals a
+  collection that drifted -- which is the whole point of it being here rather
+  than in your head. It deliberately never sets `$?`: a push failure is not a
+  deploy failure, because the page is already live and only the reminders are
+  stale. It needs a `~/.netrc` entry for `dav.domatesis.com` or it will stop
+  and prompt on every deploy.
 - The trailing slash on `"$src/app/"` matters; without it rsync creates `app/app/`.
 - Page changes need no restart. Changes to `server.py` need the container
   recreated, which the function does automatically.
