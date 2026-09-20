@@ -183,13 +183,7 @@ LAN or Tailscale:
 Once events have synced, the alarms are local: they fire with the phone off the
 network entirely. Only picking up *changes* needs Tailscale.
 
-### The CalDAV route: pushing into Radicale (experimental)
-
-**Experimental, and nothing depends on it.** It is not part of `schedule-deploy`,
-and the page and the `.ics` feed work whether or not it is ever run. The push
-half is tested -- against a throwaway Radicale 3.8.0, not against the real
-server -- and the phone half is not tested at all. Read the caveats at the end
-of this section before relying on it for a morning alarm.
+### The CalDAV route: pushing into Radicale
 
 The phone here is GrapheneOS running Fossify Calendar, synced by DAVx⁵ against
 Radicale at `dav.domatesis.com`. That sync path already works, so the timetable
@@ -291,14 +285,15 @@ event is left alone, and `DTSTART`, `RRULE` and `VALARM` all round-trip with no
 none of them -- but it did add its own 46, taking that collection to 49 items.
 It cannot destroy anything; it can still make a mess. Hence `--dry-run`.
 
-**What is not proven.** The real server behind Caddy and TLS, where a `[rights]`
-section may refuse `MKCALENDAR` -- if it does, create the collection by hand as
-type *Calendar* and re-run, since the script only creates one when `PROPFIND`
-returns 404. And everything downstream of Radicale: whether DAVx⁵ maps the
-feed's floating times onto the device timezone as intended is the one that
-matters, because getting it wrong puts every event an hour out rather than
-failing loudly. Check a single event on the phone against the page before
-trusting an alarm to it.
+On the real server the whole chain has been walked once, ending at a Monday
+gym block reading **19:30** in Fossify. That last check is the one worth
+repeating if anything in the chain changes, because a floating time resolved
+against the wrong zone puts every event an hour out instead of failing loudly
+-- it is the failure that looks like nothing is wrong.
+
+If `MKCALENDAR` is ever refused by a `[rights]` section, create the collection
+by hand as type *Calendar* and re-run: the script only creates one when
+`PROPFIND` returns 404.
 
 ### Views
 

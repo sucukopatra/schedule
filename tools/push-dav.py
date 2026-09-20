@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 """Push schedule.ics into a CalDAV collection, one resource per event.
 
-EXPERIMENTAL. Nothing depends on this: it is not wired into schedule-deploy,
-and the page and the .ics feed work without it. What has been proven is the
-push itself, against a throwaway Radicale 3.8.0 -- collection created, 46
-events written, a re-run updating in place rather than duplicating, a stale
-event removed, a hand-added one left alone. What has NOT been proven is the
-rest of the chain: the real server behind Caddy and TLS (if [rights] forbids
-MKCALENDAR, make the collection by hand and re-run), and what DAVx5 and Fossify
-do with these events once they arrive -- in particular whether DAVx5 maps the
-feed's floating times onto the device timezone, which is the one thing standing
-between this and events an hour out. Check one event on the phone before
-trusting it. Run --dry-run first: aimed at the wrong collection this deletes
-nothing, but it does add 46 events you would then clear out by hand.
+This is how reminders reach the phone: schedule.js -> make-ics.js ->
+schedule.ics -> here -> Radicale -> DAVx5 -> Fossify, where the alarms are
+local and fire with the phone off the network. The whole chain has been walked
+once, ending at a gym block reading 19:30 on the phone, which is what says the
+floating times survived the trip.
+
+Run --dry-run when pointing this anywhere new. Aimed at the wrong collection it
+deletes nothing, but it does add 46 events you would then clear out by hand.
 
     python3 tools/push-dav.py                 # push, using $SCHEDULE_DAV_* or ~/.netrc
     python3 tools/push-dav.py --dry-run       # say what would change, touch nothing
