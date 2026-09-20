@@ -8,9 +8,10 @@
 # app/, which the container serves, and tools/push-dav.py, which the calendar
 # sidecar runs. Neither rsync can reach data/, where the ticks live.
 #
-# Nothing here talks to Radicale. The calendar push runs on bmo now, watching
-# the deployed schedule.ics, so it keeps working whether or not this laptop
-# still exists. That is the whole point of the split.
+# The calendar push runs on bmo, not here, through the schedule container that
+# already exists -- it is already on the `core` network and already mounts the
+# feed. The credentials live on bmo too, so this laptop holds nothing the
+# server needs.
 set -eu
 
 host=${SCHEDULE_HOST:-bmo}
@@ -45,13 +46,20 @@ case $app_out in
     ;;
 esac
 
-# The sidecar holds push-dav.py in memory for as long as it runs, so a new
-# copy on disk means nothing until it is restarted.
-case $tools_out in
-  *push-dav.py*)
-    ssh "$host" 'cd /srv/docker && docker compose up -d --force-recreate schedule-calendar'
-    echo "Recreated schedule-calendar (push-dav.py changed)."
-    ;;
-esac
-
-# The .ics is picked up by the sidecar on its own, within --poll seconds.
+# Push the timetable into Radicale, from inside the schedule container: the
+# host cannot reach radicale:5232 (the stack uses `expose`, not `publish`), but
+# anything on the `core` network can, which skips TLS, public DNS and Caddy.
+#
+# Unconditional, because it is cheap and idempotent, and a deploy is exactly
+# when you are paying attention if it has anything to say.
+#
+# `docker exec -e VAR` with no value passes the variable through from the
+# calling shell, so the password is never an argument and never shows in ps.
+# A failed push is not a failed deploy: the page is already live.
+if ! ssh "$host" "set -a; . '$root/dav.env'; set +a; \
+      docker exec -e SCHEDULE_DAV_USER -e SCHEDULE_DAV_PASS schedule \
+        python /tools/push-dav.py \
+          --ics /app/web/schedule.ics \
+          --url http://radicale:5232/ender/schedule/"; then
+  echo "Calendar push failed. The page is live; phone reminders are stale."
+fi
