@@ -5,8 +5,8 @@
 #
 # This lives in the repo rather than in ~/.zshrc so that a reinstalled laptop
 # needs nothing but a clone of this repo to deploy again. Two things go up:
-# app/, which the container serves, and tools/push-dav.py, which the calendar
-# sidecar runs. Neither rsync can reach data/, where the ticks live.
+# app/, which the container serves, and tools/push-dav.py, which the push at
+# the end runs. Neither rsync can reach data/, where the ticks live.
 #
 # The calendar push runs on bmo, not here, through the schedule container that
 # already exists -- it is already on the `core` network and already mounts the
@@ -17,6 +17,20 @@ set -eu
 host=${SCHEDULE_HOST:-bmo}
 root=${SCHEDULE_ROOT:-/srv/docker/config/caddy/webpages/schedule}
 src=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+# Refuse to ship a stale or broken timetable. check-schedule.js is the only
+# thing that validates schedule.js at all -- nothing does so at runtime -- and
+# it also fails when schedule.ics no longer matches it. That second half is
+# what earns it a place here: a stale .ics is now pushed to the phone as real
+# reminders, so the failure is an alarm at last term's time rather than a page
+# that looks wrong. Nothing downstream would ever catch it.
+#
+# Quiet unless it fails: the notes it prints on a clean run are not deploy news.
+if ! checks=$(node "$src/tools/check-schedule.js" 2>&1); then
+  printf '%s\n' "$checks"
+  echo "Refusing to deploy. Fix the above; a stale .ics is: node tools/make-ics.js"
+  exit 1
+fi
 
 # --delete is safe here only because the target is app/, never the parent.
 app_out=$(rsync -az --delete --itemize-changes "$src/app/" "$host:$root/app/")

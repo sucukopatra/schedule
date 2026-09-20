@@ -436,7 +436,11 @@ what is actually wrong.
 
 Nothing is built, locally or on the server. Deploy is `tools/deploy.sh`, which
 lives in this repo rather than in `~/.zshrc` so a reinstalled laptop needs only
-a clone. It rsyncs `app/`, which the container serves, and `tools/push-dav.py`,
+a clone. It runs `check-schedule.js` first and refuses to ship if that fails --
+quietly when it passes, since the notes it prints on a clean run are not deploy
+news. A stale `schedule.ics` is the case that earns the guard: it now reaches
+the phone as real reminders, so the symptom is an alarm at last term's time
+rather than a page that looks wrong, and nothing downstream would catch it. It rsyncs `app/`, which the container serves, and `tools/push-dav.py`,
 which the calendar sidecar runs; `data/` is never a target, so the ticks cannot
 be reached by a `--delete`. For reference, what it does:
 
