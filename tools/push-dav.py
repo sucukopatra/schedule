@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Push schedule.ics into a CalDAV collection, one resource per event.
 
-This is how reminders reach the phone: schedule.js -> make-ics.js ->
-schedule.ics -> here -> Radicale -> DAVx5 -> Fossify, where the alarms are
-local and fire with the phone off the network. The whole chain has been walked
+This is how the timetable reaches the phone: schedule.js -> make-ics.js ->
+schedule.ics -> here -> Radicale -> DAVx5 -> Fossify. The chain has been walked
 once, ending at a gym block reading 19:30 on the phone, which is what says the
 floating times survived the trip.
+
+The VALARMs do not currently produce a notification, though they reach Radicale
+intact. So this delivers a timetable you can look at, not reminders -- see
+DEPLOYMENT.md for where that is stuck.
 
 Run --dry-run when pointing this anywhere new. Aimed at the wrong collection it
 deletes nothing, but it does add 46 events you would then clear out by hand.
