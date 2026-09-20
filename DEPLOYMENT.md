@@ -223,7 +223,7 @@ The choice is remembered per device in localStorage, not synced.
 ### Block ids and ticks
 
 Tickable kinds are `deep`, `gym`, `habit` and `review`. Each gets a stable id
-from its kind, day and start time (`gym-Thu-18:15`), so ids are never written by
+from its kind, day and start time (`gym-Mon-19:30`), so ids are never written by
 hand and can never collide. Moving a block in `schedule.js` changes its id and
 so drops that week's tick for it, which is normally what you want.
 
@@ -232,7 +232,7 @@ so drops that week's tick for it, which is normally what you want.
 ```json
 { "v": 3, "week": "2026-W38", "type": "normal",
   "slots": { "deep-Thu-16:00": "coursework" },
-  "done":  { "gym-Thu-18:15": true },
+  "done":  { "gym-Mon-19:30": true },
   "history": [
     { "week": "2026-W37", "type": "normal",
       "meters": { "coursework": [3, 3], "gym": [2, 3], "german": [6, 7] } }

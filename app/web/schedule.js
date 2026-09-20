@@ -77,47 +77,49 @@ var SCHEDULE = {
     { day: '*',                             at: '22:30-23:00', kind: 'habit', title: 'Reading', note: 'Before bed',     track: 'reading' },
 
     /* --- Monday: longest day --------------------------------------------- */
-    { day: 'Mon', at: '09:00-11:00', kind: 'class',  title: 'GAME 207',          note: 'E2-210' },
-    { day: 'Mon', at: '11:00-13:00', kind: 'class',  title: 'PHYS 101 lab',      note: 'E2-101, 12:00 online' },
-    { day: 'Mon', at: '14:00-17:00', kind: 'class',  title: 'CMPE 100',          note: 'E1-102' },
-    { day: 'Mon', at: '17:00-19:00', kind: 'class',  title: 'CMPE 100 lab',      note: 'E3-304' },
-    { day: 'Mon', at: '19:30-21:00', kind: 'anchor', title: 'Dinner, wind down', note: 'Longest day, nothing else' },
+    { day: 'Mon', at: '09:00-11:00', kind: 'class', title: 'GAME 207',     note: 'E2-210' },
+    { day: 'Mon', at: '11:00-13:00', kind: 'class', title: 'PHYS 101 lab', note: 'E2-101, 12:00 online' },
+    { day: 'Mon', at: '14:00-17:00', kind: 'class', title: 'CMPE 100',     note: 'E1-102' },
+    { day: 'Mon', at: '17:00-19:00', kind: 'class', title: 'CMPE 100 lab', note: 'E3-304' },
+    /* The gym runs its men’s block on Mon, Wed and Fri only, 19:30 onwards,
+       and classes on those days are over by 19:15. That is what moved meal
+       prep to Tue and Thu, and what took the wind-down slot off Monday. */
+    { day: 'Mon', at: '19:30-21:00', kind: 'gym',   title: 'Gym',          track: 'gym' },
 
     /* --- Tuesday --------------------------------------------------------- */
-    { day: 'Tue', at: '09:00-12:00', kind: 'class', title: 'PHYS 101',      note: 'ÇSM-203, GAME 201 online at 10' },
-    { day: 'Tue', at: '12:00-14:00', kind: 'class', title: 'GAME 201 lab',  note: 'E1-219' },
-    { day: 'Tue', at: '14:00-16:00', kind: 'class', title: 'CHEM 110 lab',  note: 'ÇSM-305' },
-    { day: 'Tue', at: '16:00-18:00', kind: 'deep',  title: 'Deep session' },
-    { day: 'Tue', at: '18:00-19:00', kind: 'class', title: 'CHEM 110',      note: 'E3-ZZZ5' },
-    { day: 'Tue', at: '19:30-21:00', kind: 'gym',   title: 'Gym', track: 'gym' },
+    { day: 'Tue', at: '09:00-12:00', kind: 'class',  title: 'PHYS 101',     note: 'ÇSM-203, GAME 201 online at 10' },
+    { day: 'Tue', at: '12:00-14:00', kind: 'class',  title: 'GAME 201 lab', note: 'E1-219' },
+    { day: 'Tue', at: '14:00-16:00', kind: 'class',  title: 'CHEM 110 lab', note: 'ÇSM-305' },
+    { day: 'Tue', at: '16:00-18:00', kind: 'deep',   title: 'Deep session' },
+    { day: 'Tue', at: '18:00-19:00', kind: 'class',  title: 'CHEM 110',     note: 'E3-ZZZ5' },
+    { day: 'Tue', at: '19:45-22:15', kind: 'anchor', title: 'Meal prep',    note: 'At Baki’s', weeks: ['normal','exam'] },
 
     /* --- Wednesday: mornings kept spare for laser appointments ------------ */
-    { day: 'Wed', at: '09:00-11:30', kind: 'anchor', title: 'Spare morning',        note: 'Laser, errands or catch-up' },
-    { day: 'Wed', at: '12:00-14:00', kind: 'class',  title: 'MATH 169',             note: 'E4-305' },
+    { day: 'Wed', at: '09:00-11:30', kind: 'anchor', title: 'Spare morning', note: 'Laser, errands or catch-up' },
+    { day: 'Wed', at: '12:00-14:00', kind: 'class',  title: 'MATH 169',      note: 'E4-305' },
     { day: 'Wed', at: '14:00-16:00', kind: 'deep',   title: 'Deep session' },
-    { day: 'Wed', at: '16:00-19:00', kind: 'class',  title: 'GAME 209',             note: 'E2-107' },
-    { day: 'Wed', at: '19:30-22:00', kind: 'anchor', title: 'Meal prep',            note: 'At Baki’s', weeks: ['normal','exam'] },
-    { day: 'Wed', at: '19:30-22:00', kind: 'anchor', title: 'Meal prep, big batch', note: 'Freeze some for after the trip', weeks: ['trip'] },
+    { day: 'Wed', at: '16:00-19:00', kind: 'class',  title: 'GAME 209',      note: 'E2-107' },
+    { day: 'Wed', at: '19:30-21:00', kind: 'gym',    title: 'Gym',           track: 'gym' },
 
     /* --- Thursday -------------------------------------------------------- */
-    { day: 'Thu', at: '09:00-12:00', kind: 'class', title: 'CHEM 101',     note: 'ÇSM-204' },
-    { day: 'Thu', at: '12:00-13:00', kind: 'class', title: 'MATH 169 PS',  note: 'ÇSM-Z08' },
-    { day: 'Thu', at: '14:00-16:00', kind: 'class', title: 'GAME 211 lab', note: 'E1-219' },
-    { day: 'Thu', at: '16:00-18:00', kind: 'deep',  title: 'Deep session' },
-    { day: 'Thu', at: '18:15-19:45', kind: 'gym',   title: 'Gym', track: 'gym' },
+    { day: 'Thu', at: '09:00-12:00', kind: 'class',  title: 'CHEM 101',             note: 'ÇSM-204' },
+    { day: 'Thu', at: '12:00-13:00', kind: 'class',  title: 'MATH 169 PS',          note: 'ÇSM-Z08' },
+    { day: 'Thu', at: '14:00-16:00', kind: 'class',  title: 'GAME 211 lab',         note: 'E1-219' },
+    { day: 'Thu', at: '16:00-18:00', kind: 'deep',   title: 'Deep session' },
+    { day: 'Thu', at: '18:30-21:00', kind: 'anchor', title: 'Meal prep',            note: 'At Baki’s, freeze Mon–Tue portions', weeks: ['normal','exam'] },
+    { day: 'Thu', at: '18:30-21:00', kind: 'anchor', title: 'Meal prep, big batch', note: 'Freeze some for after the trip', weeks: ['trip'] },
 
     /* --- Friday ---------------------------------------------------------- */
-    { day: 'Fri', at: '10:00-12:00', kind: 'class',  title: 'GAME 203 lab',       note: 'E1-219' },
-    { day: 'Fri', at: '12:30-14:00', kind: 'deep',   title: 'Deep session' },
-    { day: 'Fri', at: '14:00-16:00', kind: 'class',  title: 'MATH 169',           note: 'E1-306' },
-    { day: 'Fri', at: '17:00-18:00', kind: 'class',  title: 'GAME 203',           note: 'Online, from home' },
-    { day: 'Fri', at: '18:00-19:00', kind: 'class',  title: 'GAME 211',           note: 'Online, from home' },
-    { day: 'Fri', at: '19:30-22:00', kind: 'anchor', title: 'Meal prep',          note: 'At Baki’s, freeze Mon–Tue portions', weeks: ['normal','exam'] },
-    { day: 'Fri', at: '19:30-22:00', kind: 'trip',   title: 'Leave for the trip', note: 'After online classes', weeks: ['trip'] },
+    { day: 'Fri', at: '10:00-12:00', kind: 'class', title: 'GAME 203 lab',       note: 'E1-219' },
+    { day: 'Fri', at: '12:30-14:00', kind: 'deep',  title: 'Deep session' },
+    { day: 'Fri', at: '14:00-16:00', kind: 'class', title: 'MATH 169',           note: 'E1-306' },
+    { day: 'Fri', at: '17:00-18:00', kind: 'class', title: 'GAME 203',           note: 'Online, from home' },
+    { day: 'Fri', at: '18:00-19:00', kind: 'class', title: 'GAME 211',           note: 'Online, from home' },
+    { day: 'Fri', at: '19:30-21:00', kind: 'gym',   title: 'Gym',                track: 'gym', weeks: ['normal','exam'] },
+    { day: 'Fri', at: '19:30-22:00', kind: 'trip',  title: 'Leave for the trip', note: 'After online classes', weeks: ['trip'] },
 
     /* --- Saturday -------------------------------------------------------- */
     { day: 'Sat', at: '09:00-09:30', kind: 'habit',  title: 'German',       note: 'With breakfast', track: 'german', weeks: ['normal','exam'] },
-    { day: 'Sat', at: '10:00-11:30', kind: 'gym',    title: 'Gym', track: 'gym',                                     weeks: ['normal','exam'] },
     { day: 'Sat', at: '14:00-15:30', kind: 'deep',   title: 'Deep session',                                          weeks: ['normal','exam'] },
     { day: 'Sat', at: '16:00-17:30', kind: 'deep',   title: 'Deep session',                                          weeks: ['normal','exam'] },
     { day: 'Sat', at: '19:00-22:30', kind: 'anchor', title: 'Free evening', note: 'Nothing planned. Russian if German is on track', weeks: ['normal','exam'] },

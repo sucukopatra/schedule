@@ -51,7 +51,7 @@ function isoWeekBack(n) {
 const LAST = isoWeekBack(1);
 const base = { v: 2, week: W, type: 'normal', slots: {}, done: {} };
 const OLD = { ...base, savedAt: 1000 };
-const MINE = { ...base, done: { 'gym-Thu-18:15': true }, savedAt: 9000 };
+const MINE = { ...base, done: { 'gym-Mon-19:30': true }, savedAt: 9000 };
 const AHEAD = { ...MINE, savedAt: 99000 };
 
 const CASES = [
@@ -69,20 +69,20 @@ const CASES = [
     put: false, savedAt: 9000, why: 'take the server copy, write nothing back' },
   { name: 'G. state naming blocks that no longer exist',
     state: { serverState: { ...base, savedAt: 50000,
-                            slots: { 'deep-Thu-16:00': 'chess', 'deep-Mon-03:00': 'chess', 'gym-Thu-18:15': 'chess' },
-                            done: { 'gym-Thu-18:15': true, 'class-Mon-09:00': true, 'nope-Xxx-00:00': true } },
+                            slots: { 'deep-Thu-16:00': 'chess', 'deep-Mon-03:00': 'chess', 'gym-Mon-19:30': 'chess' },
+                            done: { 'gym-Mon-19:30': true, 'class-Mon-09:00': true, 'nope-Xxx-00:00': true } },
              localState: null },
-    put: false, slots: { 'deep-Thu-16:00': 'chess' }, done: { 'gym-Thu-18:15': true },
+    put: false, slots: { 'deep-Thu-16:00': 'chess' }, done: { 'gym-Mon-19:30': true },
     why: 'keep only keys that still name a real block of the right kind' },
 ];
 
-/* A finished week, as v2 wrote it: no history field at all. gym-Thu-18:15 and
-   gym-Tue-19:30 ticked is 2 of a target of 3; German ticked once of the 6 on
+/* A finished week, as v2 wrote it: no history field at all. gym-Mon-19:30 and
+   gym-Wed-19:30 ticked is 2 of a target of 3; German ticked once of the 6 on
    the timetable. */
 const FINISHED_V2 = {
   v: 2, week: LAST, type: 'normal',
   slots: { 'deep-Thu-16:00': 'coursework' },
-  done: { 'gym-Thu-18:15': true, 'gym-Tue-19:30': true, 'deep-Thu-16:00': true, 'habit-Mon-07:45': true },
+  done: { 'gym-Mon-19:30': true, 'gym-Wed-19:30': true, 'deep-Thu-16:00': true, 'habit-Mon-07:45': true },
   savedAt: 7000,
 };
 
