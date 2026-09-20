@@ -27,9 +27,11 @@ app_out=$(rsync -az --delete --itemize-changes "$src/app/" "$host:$root/app/")
 ssh "$host" "mkdir -p '$root/tools'"
 tools_out=$(rsync -az --itemize-changes "$src/tools/push-dav.py" "$host:$root/tools/")
 
+# Deliberately not an early exit. The push below has to run even when the
+# rsync moved nothing, or a push that failed once could never be retried by
+# running the deploy again -- "Nothing changed" would swallow it every time.
 if [ -z "$app_out$tools_out" ]; then
   echo "Nothing changed."
-  exit 0
 fi
 if [ -n "$app_out" ]; then echo "$app_out"; fi
 if [ -n "$tools_out" ]; then echo "$tools_out"; fi
