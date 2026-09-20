@@ -180,10 +180,8 @@ LAN or Tailscale:
 - **Android** has no subscribe-from-the-device support of its own. Either an
   app that fetches locally, such as ICSx⁵, or the CalDAV route below.
 
-Once events have synced they are local: nothing needs the network to read them,
-and only picking up *changes* needs Tailscale. Whether the `VALARM`s actually
-raise a notification depends on the client, and on the CalDAV route below they
-currently do not -- see the open problem at the end of that section.
+Once events have synced, the alarms are local: they fire with the phone off the
+network entirely. Only picking up *changes* needs Tailscale.
 
 ### The CalDAV route: pushing into Radicale
 
@@ -292,16 +290,6 @@ gym block reading **19:30** in Fossify. That last check is the one worth
 repeating if anything in the chain changes, because a floating time resolved
 against the wrong zone puts every event an hour out instead of failing loudly
 -- it is the failure that looks like nothing is wrong.
-
-**Open: the events arrive, the reminders do not fire.** The `VALARM` is in
-Radicale -- `TRIGGER:-PT15M` survives the round trip, confirmed by reading a
-gym event back off the server -- and the event shows up in Fossify at the right
-time, but no notification is raised. So something between Radicale and a
-notification is dropping it: DAVx5 not writing the alarm into Android's
-reminders table, Fossify not reading it, or Android not permitted to raise it.
-Until that is found, this is a timetable you can look at on the phone, not one
-that taps you on the shoulder -- which was the point of generating the `.ics`
-in the first place. Do not trust it for a morning you care about.
 
 If `MKCALENDAR` is ever refused by a `[rights]` section, create the collection
 by hand as type *Calendar* and re-run: the script only creates one when
