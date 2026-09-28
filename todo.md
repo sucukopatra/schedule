@@ -3,6 +3,95 @@
 Working backlog for the weekly timetable. Newest thinking at the top of each
 section; tick things off as they land.
 
+## Timetable changes, asked for 2026-09-28
+
+All in `app/web/schedule.js` unless noted. Everything below landed
+2026-09-28 except the two labs, which are **Waiting**.
+
+Moving or deleting a tickable block changes its id and drops its ticks for the
+current week, so land these early in a week — today is a Monday.
+
+### Straight removals
+
+Done 2026-09-28. All four checks pass and `schedule.ics` is regenerated, down
+to 43 events. Not deployed yet. None of these blocks were tickable, so no
+ticks were lost.
+
+- [x] **Drop CHEM 110, E3-ZZZ5.** The Tue 18:00–19:00 lecture. The CHEM 110
+      lab on Tue 14:00 stays.
+- [x] **Drop the GAME 203 and GAME 211 online classes.** Fri 17:00–18:00 and
+      18:00–19:00. Their labs (GAME 203 Fri 10:00, GAME 211 Thu 14:00) stay.
+      The trip block's note, "After online classes", was wrong after this,
+      so it's gone. The trip still leaves at 19:30, but Friday is free from
+      16:00 now, so it could leave earlier.
+- [x] **Drop the Spare morning's note.** Wed 09:00, "Laser, errands or
+      catch-up". The block itself stays. The laser line in the Wednesday
+      section comment went too.
+
+Together these freed **Tue 18:00–19:45** and **Fri 16:00–19:30**. Schedule B
+below uses Friday's for a deep session and Tuesday's for the gym.
+
+### On hold: PHYS 101 lab and CHEM 110 lab
+
+**Don't touch either for now.** Both will probably run less than weekly, in a
+"bit weird" pattern, and neither pattern is decided yet. They stay exactly as
+they are, weekly, until it is: PHYS 101 lab Mon 11:00–13:00, CHEM 110 lab
+Tue 14:00–16:00.
+
+- [ ] **Waiting:** the actual pattern for each lab, whether that's odd or even
+      weeks, a start date, or an irregular list of dates.
+- [ ] Then build it once for both. Right now a block can only be limited by
+      week *type* (`weeks`), not by calendar week, so this needs a new field.
+      Recommendation: an `isoWeeks` list on the block itself, the same shape
+      the week types already use. That covers a strict alternation and an
+      irregular pattern alike, so a weird pattern needs no extra code.
+      Touches `app.js` (`forWeek` and the grid filter), `check-schedule.js`
+      (validate the list) and `make-ics.js`, which currently writes one weekly
+      `RRULE` per block and would need `INTERVAL=2` or one event per date.
+
+### Gym, meal prep, deep sessions, German and Reading: schedule B
+
+Done 2026-09-28. The user picked alternative B from `schedules.md`, which
+still holds all three alternatives and the reasons behind B. All four checks
+pass and `schedule.ics` is regenerated, now 47 events. Not deployed yet.
+
+- [x] **Gym, 5x5**, Tue and Thu 18:30–19:45 and Sat 10:00–11:15 (normal and
+      exam weeks only). Never two days in a row. The gym targets didn't need
+      to change: normal 3, trip 2 (Tue, Thu), exam 2 with one spare. The old
+      Mon/Wed/Fri 19:30 blocks and the men's-block comment are gone.
+- [x] **Meal prep** at Baki's on Wed 19:30–22:00 (cooks for Thu–Sat) and Sun
+      16:00–18:30 (cooks for Mon–Wed). In trip weeks, Wednesday is the big
+      batch and there is no Sunday prep. Baki confirmed the days can move.
+- [x] **Deep sessions, none at weekends:** Tue 16:00, Wed 14:00, Thu 16:00,
+      Fri 08:15, Fri 12:30, Fri 16:00. Still 6 for 6 in normal and exam weeks,
+      with no slack. Trip weeks now have 6 for 4. `check-plan.js` has the new
+      slots.
+- [x] **Anki**, 15 min at breakfast every day: weekdays 07:45, weekends
+      09:00. It is on in trip weeks too and sits inside the trip blocks, which
+      is allowed. It keeps the `german` track and history, now labelled
+      "Anki". The weekday and Saturday ids are unchanged, so no ticks were
+      lost.
+- [x] **Nicos Weg**, 30 min, on its own `nicosweg` meter: Mon 20:00, Thu
+      20:30, Sat 11:45. The Saturday lesson is off in trip weeks, so those
+      weeks get 2. The Sunday "Long German session" is gone.
+- [x] **Long read**, Sun 11:00–12:30, normal and exam weeks, on its own
+      `longread` meter. The meter shows "Paused" in trip weeks. Reading
+      before bed stays as it was.
+- [x] Rewrote the `alarms` comment's joke about breakfast with your German.
+- [x] `check-sync.js` used the old gym ids in its fixtures. They now use
+      Tue and Thu 18:30.
+- [ ] Habits still get no calendar alarm. If Anki or Nicos Weg keep getting
+      forgotten, add `habit` to `alarms`, or give these a kind of their own.
+- [ ] This week (W40) is the first on the new timetable. After it, check
+      whether Friday at 08:15 actually happens.
+
+### After every edit
+
+- [ ] Run all four checks in `tools/` and look at the page, both views.
+- [ ] Regenerate the calendar feed with `node tools/make-ics.js`, then deploy
+      with `tools/deploy.sh`. The deploy refuses a stale `schedule.ics`, so
+      the phone calendar can't fall behind the page.
+
 ## Bugs
 
 ### Round 2, found and fixed 2026-09-19 by audit

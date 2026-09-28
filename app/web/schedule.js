@@ -38,8 +38,9 @@ var SCHEDULE = {
   termEnd:   '2026-12-22',
 
   /* Minutes of warning in the calendar feed, by kind. A kind that is not
-     listed gets no alarm, which is why habit is absent: a reminder to eat
-     breakfast with your German is not a reminder anyone needs. */
+     listed gets no alarm, which is why habit is absent: they are small and
+     daily, and a ping for every one of them is how a phone learns to be
+     ignored. */
   alarms: { class: 30, gym: 15, deep: 10, review: 10, trip: 60 },
 
   /* isoWeeks: the weeks this type takes over, as ISO week strings. The type is
@@ -65,71 +66,71 @@ var SCHEDULE = {
   },
 
   /* Meters with no target in weeks.targets: the target is however many are
-     scheduled that week, i.e. "do all of them". */
+     scheduled that week, i.e. "do all of them". Anki keeps the `german`
+     track, so the German history from before Nicos Weg carries on. */
   habitMeters: [
-    { track: 'german',  label: 'German'  },
-    { track: 'reading', label: 'Reading' }
+    { track: 'german',   label: 'Anki'      },
+    { track: 'nicosweg', label: 'Nicos Weg' },
+    { track: 'reading',  label: 'Reading'   },
+    { track: 'longread', label: 'Long read' }
   ],
 
   blocks: [
     /* --- every week ------------------------------------------------------ */
-    { day: ['Mon','Tue','Wed','Thu','Fri'], at: '07:45-08:15', kind: 'habit', title: 'German',  note: 'With breakfast', track: 'german' },
-    { day: '*',                             at: '22:30-23:00', kind: 'habit', title: 'Reading', note: 'Before bed',     track: 'reading' },
+    { day: ['Mon','Tue','Wed','Thu','Fri'], at: '07:45-08:00', kind: 'habit', title: 'Anki',    note: 'Nouns with der/die/das', track: 'german' },
+    { day: ['Sat','Sun'],                   at: '09:00-09:15', kind: 'habit', title: 'Anki',    note: 'Nouns with der/die/das', track: 'german' },
+    { day: '*',                             at: '22:30-23:00', kind: 'habit', title: 'Reading', note: 'Before bed',             track: 'reading' },
 
-    /* --- Monday: longest day --------------------------------------------- */
+    /* --- Monday: longest day, so the evening stays light ----------------- */
     { day: 'Mon', at: '09:00-11:00', kind: 'class', title: 'GAME 207',     note: 'E2-210' },
     { day: 'Mon', at: '11:00-13:00', kind: 'class', title: 'PHYS 101 lab', note: 'E2-101, 12:00 online' },
     { day: 'Mon', at: '14:00-17:00', kind: 'class', title: 'CMPE 100',     note: 'E1-102' },
     { day: 'Mon', at: '17:00-19:00', kind: 'class', title: 'CMPE 100 lab', note: 'E3-304' },
-    /* The gym runs its men’s block on Mon, Wed and Fri only, 19:30 onwards,
-       and classes on those days are over by 19:15. That is what moved meal
-       prep to Tue and Thu, and what took the wind-down slot off Monday. */
-    { day: 'Mon', at: '19:30-21:00', kind: 'gym',   title: 'Gym',          track: 'gym' },
+    { day: 'Mon', at: '20:00-20:30', kind: 'habit', title: 'Nicos Weg',    note: 'Next lesson, in order', track: 'nicosweg' },
 
     /* --- Tuesday --------------------------------------------------------- */
-    { day: 'Tue', at: '09:00-12:00', kind: 'class',  title: 'PHYS 101',     note: 'ÇSM-203, GAME 201 online at 10' },
-    { day: 'Tue', at: '12:00-14:00', kind: 'class',  title: 'GAME 201 lab', note: 'E1-219' },
-    { day: 'Tue', at: '14:00-16:00', kind: 'class',  title: 'CHEM 110 lab', note: 'ÇSM-305' },
-    { day: 'Tue', at: '16:00-18:00', kind: 'deep',   title: 'Deep session' },
-    { day: 'Tue', at: '18:00-19:00', kind: 'class',  title: 'CHEM 110',     note: 'E3-ZZZ5' },
-    { day: 'Tue', at: '19:45-22:15', kind: 'anchor', title: 'Meal prep',    note: 'At Baki’s', weeks: ['normal','exam'] },
+    { day: 'Tue', at: '09:00-12:00', kind: 'class', title: 'PHYS 101',     note: 'ÇSM-203, GAME 201 online at 10' },
+    { day: 'Tue', at: '12:00-14:00', kind: 'class', title: 'GAME 201 lab', note: 'E1-219' },
+    { day: 'Tue', at: '14:00-16:00', kind: 'class', title: 'CHEM 110 lab', note: 'ÇSM-305' },
+    { day: 'Tue', at: '16:00-18:00', kind: 'deep',  title: 'Deep session' },
+    { day: 'Tue', at: '18:30-19:45', kind: 'gym',   title: 'Gym',          note: '5x5', track: 'gym' },
 
-    /* --- Wednesday: mornings kept spare for laser appointments ------------ */
-    { day: 'Wed', at: '09:00-11:30', kind: 'anchor', title: 'Spare morning', note: 'Laser, errands or catch-up' },
-    { day: 'Wed', at: '12:00-14:00', kind: 'class',  title: 'MATH 169',      note: 'E4-305' },
+    /* --- Wednesday ------------------------------------------------------- */
+    { day: 'Wed', at: '09:00-11:30', kind: 'anchor', title: 'Spare morning' },
+    { day: 'Wed', at: '12:00-14:00', kind: 'class',  title: 'MATH 169',             note: 'E4-305' },
     { day: 'Wed', at: '14:00-16:00', kind: 'deep',   title: 'Deep session' },
-    { day: 'Wed', at: '16:00-19:00', kind: 'class',  title: 'GAME 209',      note: 'E2-107' },
-    { day: 'Wed', at: '19:30-21:00', kind: 'gym',    title: 'Gym',           track: 'gym' },
+    { day: 'Wed', at: '16:00-19:00', kind: 'class',  title: 'GAME 209',             note: 'E2-107' },
+    { day: 'Wed', at: '19:30-22:00', kind: 'anchor', title: 'Meal prep',            note: 'At Baki’s, cooks for Thu–Sat',   weeks: ['normal','exam'] },
+    { day: 'Wed', at: '19:30-22:00', kind: 'anchor', title: 'Meal prep, big batch', note: 'Freeze some for after the trip', weeks: ['trip'] },
 
     /* --- Thursday -------------------------------------------------------- */
-    { day: 'Thu', at: '09:00-12:00', kind: 'class',  title: 'CHEM 101',             note: 'ÇSM-204' },
-    { day: 'Thu', at: '12:00-13:00', kind: 'class',  title: 'MATH 169 PS',          note: 'ÇSM-Z08' },
-    { day: 'Thu', at: '14:00-16:00', kind: 'class',  title: 'GAME 211 lab',         note: 'E1-219' },
-    { day: 'Thu', at: '16:00-18:00', kind: 'deep',   title: 'Deep session' },
-    { day: 'Thu', at: '18:30-21:00', kind: 'anchor', title: 'Meal prep',            note: 'At Baki’s, freeze Mon–Tue portions', weeks: ['normal','exam'] },
-    { day: 'Thu', at: '18:30-21:00', kind: 'anchor', title: 'Meal prep, big batch', note: 'Freeze some for after the trip', weeks: ['trip'] },
+    { day: 'Thu', at: '09:00-12:00', kind: 'class', title: 'CHEM 101',     note: 'ÇSM-204' },
+    { day: 'Thu', at: '12:00-13:00', kind: 'class', title: 'MATH 169 PS',  note: 'ÇSM-Z08' },
+    { day: 'Thu', at: '14:00-16:00', kind: 'class', title: 'GAME 211 lab', note: 'E1-219' },
+    { day: 'Thu', at: '16:00-18:00', kind: 'deep',  title: 'Deep session' },
+    { day: 'Thu', at: '18:30-19:45', kind: 'gym',   title: 'Gym',          note: '5x5', track: 'gym' },
+    { day: 'Thu', at: '20:30-21:00', kind: 'habit', title: 'Nicos Weg',    note: 'Next lesson, in order', track: 'nicosweg' },
 
-    /* --- Friday ---------------------------------------------------------- */
+    /* --- Friday: the long work day, done by 18:00 ------------------------ */
+    { day: 'Fri', at: '08:15-09:45', kind: 'deep',  title: 'Deep session' },
     { day: 'Fri', at: '10:00-12:00', kind: 'class', title: 'GAME 203 lab',       note: 'E1-219' },
     { day: 'Fri', at: '12:30-14:00', kind: 'deep',  title: 'Deep session' },
     { day: 'Fri', at: '14:00-16:00', kind: 'class', title: 'MATH 169',           note: 'E1-306' },
-    { day: 'Fri', at: '17:00-18:00', kind: 'class', title: 'GAME 203',           note: 'Online, from home' },
-    { day: 'Fri', at: '18:00-19:00', kind: 'class', title: 'GAME 211',           note: 'Online, from home' },
-    { day: 'Fri', at: '19:30-21:00', kind: 'gym',   title: 'Gym',                track: 'gym', weeks: ['normal','exam'] },
-    { day: 'Fri', at: '19:30-22:00', kind: 'trip',  title: 'Leave for the trip', note: 'After online classes', weeks: ['trip'] },
+    { day: 'Fri', at: '16:00-18:00', kind: 'deep',  title: 'Deep session' },
+    { day: 'Fri', at: '19:30-22:00', kind: 'trip',  title: 'Leave for the trip', weeks: ['trip'] },
 
     /* --- Saturday -------------------------------------------------------- */
-    { day: 'Sat', at: '09:00-09:30', kind: 'habit',  title: 'German',       note: 'With breakfast', track: 'german', weeks: ['normal','exam'] },
-    { day: 'Sat', at: '14:00-15:30', kind: 'deep',   title: 'Deep session',                                          weeks: ['normal','exam'] },
-    { day: 'Sat', at: '16:00-17:30', kind: 'deep',   title: 'Deep session',                                          weeks: ['normal','exam'] },
+    { day: 'Sat', at: '10:00-11:15', kind: 'gym',    title: 'Gym',          note: '5x5', track: 'gym',                          weeks: ['normal','exam'] },
+    { day: 'Sat', at: '11:45-12:15', kind: 'habit',  title: 'Nicos Weg',    note: 'Next lesson, in order', track: 'nicosweg', weeks: ['normal','exam'] },
     { day: 'Sat', at: '19:00-22:30', kind: 'anchor', title: 'Free evening', note: 'Nothing planned. Russian if German is on track', weeks: ['normal','exam'] },
     { day: 'Sat', at: '08:30-22:00', kind: 'trip',   title: 'Trip',         note: 'Monthly weekend out of İstanbul', weeks: ['trip'] },
 
     /* --- Sunday ---------------------------------------------------------- */
-    { day: 'Sun', at: '11:30-12:30', kind: 'habit',  title: 'Long German session', note: 'Counts as Sunday’s German', track: 'german', weeks: ['normal','exam'] },
-    { day: 'Sun', at: '14:00-15:30', kind: 'review', title: 'Weekly review',       note: 'Check counts, preview CompEng, plan slots', weeks: ['normal','exam'] },
-    { day: 'Sun', at: '19:30-21:00', kind: 'light',  title: 'Chess games',         note: 'Play rapid, then review',  weeks: ['normal','exam'] },
-    { day: 'Sun', at: '08:30-20:30', kind: 'trip',   title: 'Trip',                note: 'Heading back in the evening', weeks: ['trip'] },
-    { day: 'Sun', at: '21:00-21:30', kind: 'review', title: 'Quick review',        note: '30 min when back',         weeks: ['trip'] }
+    { day: 'Sun', at: '11:00-12:30', kind: 'habit',  title: 'Long read',     note: 'A proper sit-down with the book', track: 'longread', weeks: ['normal','exam'] },
+    { day: 'Sun', at: '14:00-15:30', kind: 'review', title: 'Weekly review', note: 'Check counts, preview CompEng, plan slots', weeks: ['normal','exam'] },
+    { day: 'Sun', at: '16:00-18:30', kind: 'anchor', title: 'Meal prep',     note: 'At Baki’s, cooks for Mon–Wed',    weeks: ['normal','exam'] },
+    { day: 'Sun', at: '19:30-21:00', kind: 'light',  title: 'Chess games',   note: 'Play rapid, then review',         weeks: ['normal','exam'] },
+    { day: 'Sun', at: '08:30-20:30', kind: 'trip',   title: 'Trip',          note: 'Heading back in the evening',     weeks: ['trip'] },
+    { day: 'Sun', at: '21:00-21:30', kind: 'review', title: 'Quick review',  note: '30 min when back',                weeks: ['trip'] }
   ]
 };

@@ -17,20 +17,20 @@ function isoWeekOf(d) {
   return t.getUTCFullYear() + '-W' + String(Math.ceil(((t - jan1) / 86400000 + 1) / 7)).padStart(2, '0');
 }
 
-/* Normal weeks hold six deep slots: Tue 16:00, Wed 14:00, Thu 16:00, Fri
-   12:30, Sat 14:00 and Sat 16:00, against targets of 3 coursework, 2 software
+/* Normal weeks hold six deep slots: Tue 16:00, Wed 14:00, Thu 16:00, and
+   Fri 08:15, 12:30 and 16:00, against targets of 3 coursework, 2 software
    and 1 chess. Monday 08:00 is before all of them, Sunday 23:00 after. */
 const MON = new Date(2026, 8, 21, 8, 0);   // Mon 21 Sep 2026
 const SUN = new Date(2026, 8, 27, 23, 0);  // Sun 27 Sep 2026
 const WEEK = isoWeekOf(MON);
-const ALL = ['deep-Tue-16:00', 'deep-Wed-14:00', 'deep-Thu-16:00', 'deep-Fri-12:30', 'deep-Sat-14:00', 'deep-Sat-16:00'];
+const ALL = ['deep-Tue-16:00', 'deep-Wed-14:00', 'deep-Thu-16:00', 'deep-Fri-08:15', 'deep-Fri-12:30', 'deep-Fri-16:00'];
 
 const st = (slots, when) => ({
   serverState: { v: 3, week: WEEK, type: 'normal', slots, done: {}, history: [], savedAt: 5000 },
   now: (when || MON).getTime(),
 });
 const full = { 'deep-Tue-16:00': 'coursework', 'deep-Wed-14:00': 'coursework', 'deep-Thu-16:00': 'coursework',
-               'deep-Fri-12:30': 'software', 'deep-Sat-14:00': 'software', 'deep-Sat-16:00': 'chess' };
+               'deep-Fri-08:15': 'software', 'deep-Fri-12:30': 'software', 'deep-Fri-16:00': 'chess' };
 
 const CASES = [
   { name: 'nothing assigned yet',
@@ -42,7 +42,7 @@ const CASES = [
     says: '4 open sessions left · still needs 2 Coursework, 2 Software project.',
     button: true },
   { name: 'one left, one needed (singular)',
-    run: () => drive(st({ ...full, 'deep-Sat-16:00': undefined })),
+    run: () => drive(st({ ...full, 'deep-Fri-16:00': undefined })),
     says: '1 open session left · still needs 1 Chess study.',
     button: true },
   { name: 'fully assigned and adding up',
@@ -50,7 +50,7 @@ const CASES = [
     says: 'Every deep session is spoken for, and the targets add up.',
     button: false },
   { name: 'assigned, but one category over at another\'s expense',
-    run: () => drive(st({ ...full, 'deep-Sat-16:00': 'coursework' })),
+    run: () => drive(st({ ...full, 'deep-Fri-16:00': 'coursework' })),
     says: 'Every session is assigned, but the week is still short 1 Chess study — something else has one too many.',
     button: false },
   { name: 'slots went by unassigned (Sunday night)',
@@ -69,10 +69,10 @@ const CASES = [
 const FILL = [
   { name: 'fill from empty', slots: {},
     want: { 'deep-Tue-16:00': 'coursework', 'deep-Wed-14:00': 'coursework', 'deep-Thu-16:00': 'coursework',
-            'deep-Fri-12:30': 'software', 'deep-Sat-14:00': 'software', 'deep-Sat-16:00': 'chess' } },
+            'deep-Fri-08:15': 'software', 'deep-Fri-12:30': 'software', 'deep-Fri-16:00': 'chess' } },
   { name: 'fill around what is already chosen', slots: { 'deep-Tue-16:00': 'chess', 'deep-Thu-16:00': 'software' },
     want: { 'deep-Tue-16:00': 'chess', 'deep-Thu-16:00': 'software', 'deep-Wed-14:00': 'coursework',
-            'deep-Fri-12:30': 'coursework', 'deep-Sat-14:00': 'coursework', 'deep-Sat-16:00': 'software' } },
+            'deep-Fri-08:15': 'coursework', 'deep-Fri-12:30': 'coursework', 'deep-Fri-16:00': 'software' } },
 ];
 
 (async () => {
