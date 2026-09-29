@@ -9,21 +9,14 @@
    on Sunday. Its branches are worth pinning down. */
 'use strict';
 const drive = require('./harness.js');
-
-function isoWeekOf(d) {
-  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
-  const jan1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
-  return t.getUTCFullYear() + '-W' + String(Math.ceil(((t - jan1) / 86400000 + 1) / 7)).padStart(2, '0');
-}
+const { isoWeek } = require('./lib.js');
 
 /* Normal weeks hold six deep slots: Tue 16:00, Wed 14:00, Thu 16:00, and
    Fri 08:15, 12:30 and 16:00, against targets of 3 coursework, 2 software
    and 1 chess. Monday 08:00 is before all of them, Sunday 23:00 after. */
 const MON = new Date(2026, 8, 21, 8, 0);   // Mon 21 Sep 2026
 const SUN = new Date(2026, 8, 27, 23, 0);  // Sun 27 Sep 2026
-const WEEK = isoWeekOf(MON);
-const ALL = ['deep-Tue-16:00', 'deep-Wed-14:00', 'deep-Thu-16:00', 'deep-Fri-08:15', 'deep-Fri-12:30', 'deep-Fri-16:00'];
+const WEEK = isoWeek(MON);
 
 const st = (slots, when) => ({
   serverState: { v: 3, week: WEEK, type: 'normal', slots, done: {}, history: [], savedAt: 5000 },
@@ -31,6 +24,7 @@ const st = (slots, when) => ({
 });
 const full = { 'deep-Tue-16:00': 'coursework', 'deep-Wed-14:00': 'coursework', 'deep-Thu-16:00': 'coursework',
                'deep-Fri-08:15': 'software', 'deep-Fri-12:30': 'software', 'deep-Fri-16:00': 'chess' };
+const ALL = Object.keys(full);
 
 const CASES = [
   { name: 'nothing assigned yet',

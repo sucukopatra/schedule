@@ -44,11 +44,12 @@ function matches(attrs, selector) {
 }
 
 module.exports = function drive(opts) {
-  const { serverState = null, localState = null, now = null, webDir = WEB } = opts || {};
+  const { serverState = null, localState = null, now = null, view = null, webDir = WEB } = opts || {};
   const clicks = [].concat(opts && opts.click ? opts.click : []);
   const calls = [];
   const store = {};
   if (localState) store['ender-schedule'] = JSON.stringify(localState);
+  if (view) store['ender-schedule:view'] = view;
 
   let html = '';
   let listeners = [];
@@ -90,8 +91,7 @@ module.exports = function drive(opts) {
       setItem: (k, v) => { store[k] = String(v); },
     },
     document: {
-      getElementById: (id) => (id === 'state'
-        ? { textContent: '{"v":3,"type":"normal","slots":{},"done":{}}' } : root),
+      getElementById: () => root,
       addEventListener() {},
       visibilityState: 'visible',
     },

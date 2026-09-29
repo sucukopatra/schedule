@@ -9,7 +9,7 @@
 
    Like the icons, the .ics is generated and committed rather than built on the
    way out -- but unlike the icons it goes stale every time the timetable
-   changes, so check-schedule.js runs --check and the pre-deploy checks catch it.
+   changes, so check-schedule.js runs check() and the deploy refuses a stale one.
 
    Times are floating: no TZID, no VTIMEZONE, no UTC offsets. "09:00" means
    nine o'clock wherever the phone is, which is exactly what a class timetable
@@ -17,42 +17,17 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const vm = require('vm');
+const { WEB, pad, loadSchedule, expand, isoWeek, typeForWeek } = require('./lib.js');
 
-const ROOT = path.join(__dirname, '..');
-const OUT = path.join(ROOT, 'app', 'web', 'schedule.ics');
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const OUT = path.join(WEB, 'schedule.ics');
 const BYDAY = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+const SCHEDULE = loadSchedule();
 
-const sandbox = {};
-vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync(path.join(ROOT, 'app', 'web', 'schedule.js'), 'utf8'), sandbox);
-const SCHEDULE = sandbox.SCHEDULE;
-const WEEK_TYPES = Object.keys(SCHEDULE.weeks);
-
-const pad = (n) => String(n).padStart(2, '0');
 const ymd = (d) => d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate());
 const parseDate = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
 
-function isoWeek(d) {
-  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
-  const jan1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
-  return t.getUTCFullYear() + '-W' + pad(Math.ceil(((t - jan1) / 86400000 + 1) / 7));
-}
-
-/* The same rule the page uses: a week no type claims is normal. */
-function typeForWeek(week) {
-  let picked = 'normal';
-  WEEK_TYPES.forEach((t) => {
-    const weeks = SCHEDULE.weeks[t].isoWeeks;
-    if (Array.isArray(weeks) && weeks.indexOf(week) >= 0) picked = t;
-  });
-  return picked;
-}
-
 /* RFC 5545: backslash, semicolon, comma and newline are special in text. */
-const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 
 /* Content lines are folded at 75 octets, continuations starting with a space. */
 function fold(line) {
@@ -89,74 +64,73 @@ function build() {
     'X-PUBLISHED-TTL:PT12H',
   ];
 
-  SCHEDULE.blocks.forEach((b) => {
-    const days = b.day === '*' ? DAYS : [].concat(b.day);
-    const [from, to] = b.at.split('-');
-    const applies = b.weeks || WEEK_TYPES;
+  expand(SCHEDULE).forEach((b) => {
+    const { d: di, from, to } = b;
 
-    days.forEach((name) => {
-      const di = DAYS.indexOf(name);
-      if (di < 0) return;
+    /* Every date in the term falling on this weekday, split into the ones
+       this block applies to and the ones it does not. A block that applies
+       to every week type can never be excluded. */
+    const on = [];
+    const off = [];
+    const d = new Date(start);
+    while (d.getDay() !== ((di + 1) % 7)) d.setDate(d.getDate() + 1);
+    for (; d <= end; d.setDate(d.getDate() + 7)) {
+      (b.weeks.indexOf(typeForWeek(SCHEDULE, isoWeek(d))) >= 0 ? on : off).push(new Date(d));
+    }
+    if (!on.length) return;
 
-      /* Every date in the term falling on this weekday, split into the ones
-         this block applies to and the ones it does not. A block that applies
-         to every week type can never be excluded. */
-      const on = [];
-      const off = [];
-      const d = new Date(start);
-      while (d.getDay() !== ((di + 1) % 7)) d.setDate(d.getDate() + 1);
-      for (; d <= end; d.setDate(d.getDate() + 7)) {
-        (applies.indexOf(typeForWeek(isoWeek(d))) >= 0 ? on : off).push(new Date(d));
-      }
-      if (!on.length) return;
+    const first = on[0];
+    const last = on[on.length - 1];
+    const skipped = off.filter((x) => x > first && x < last);
 
-      const first = on[0];
-      const last = on[on.length - 1];
-      const skipped = off.filter((x) => x > first && x < last);
-      const id = b.kind + '-' + name + '-' + from;
-
-      lines.push('BEGIN:VEVENT');
-      lines.push('UID:' + id + '@schedule.domatesis.com');
-      /* Fixed, so regenerating an unchanged timetable produces an identical
-         file and --check stays meaningful. */
-      lines.push('DTSTAMP:' + ymd(start) + 'T000000Z');
-      lines.push('SUMMARY:' + esc(b.title));
-      if (b.note) lines.push('DESCRIPTION:' + esc(b.note));
-      lines.push('DTSTART:' + ymd(first) + 'T' + from.replace(':', '') + '00');
-      lines.push('DTEND:' + ymd(first) + 'T' + to.replace(':', '') + '00');
-      lines.push('RRULE:FREQ=WEEKLY;BYDAY=' + BYDAY[di] + ';UNTIL=' + ymd(last) + 'T235959');
-      skipped.forEach((x) => {
-        lines.push('EXDATE:' + ymd(x) + 'T' + from.replace(':', '') + '00');
-      });
-      const warn = (SCHEDULE.alarms || {})[b.kind];
-      if (warn) {
-        lines.push('BEGIN:VALARM');
-        lines.push('ACTION:DISPLAY');
-        lines.push('DESCRIPTION:' + esc(b.title));
-        lines.push('TRIGGER:-PT' + warn + 'M');
-        lines.push('END:VALARM');
-      }
-      lines.push('END:VEVENT');
+    lines.push('BEGIN:VEVENT');
+    lines.push('UID:' + b.id + '@schedule.domatesis.com');
+    /* Fixed, so regenerating an unchanged timetable produces an identical
+       file and --check stays meaningful. */
+    lines.push('DTSTAMP:' + ymd(start) + 'T000000Z');
+    lines.push('SUMMARY:' + esc(b.title));
+    if (b.note) lines.push('DESCRIPTION:' + esc(b.note));
+    lines.push('DTSTART:' + ymd(first) + 'T' + from.replace(':', '') + '00');
+    lines.push('DTEND:' + ymd(first) + 'T' + to.replace(':', '') + '00');
+    lines.push('RRULE:FREQ=WEEKLY;BYDAY=' + BYDAY[di] + ';UNTIL=' + ymd(last) + 'T235959');
+    skipped.forEach((x) => {
+      lines.push('EXDATE:' + ymd(x) + 'T' + from.replace(':', '') + '00');
     });
+    const warn = (SCHEDULE.alarms || {})[b.kind];
+    if (warn) {
+      lines.push('BEGIN:VALARM');
+      lines.push('ACTION:DISPLAY');
+      lines.push('DESCRIPTION:' + esc(b.title));
+      lines.push('TRIGGER:-PT' + warn + 'M');
+      lines.push('END:VALARM');
+    }
+    lines.push('END:VEVENT');
   });
 
   lines.push('END:VCALENDAR');
   return lines.map(fold).join('\r\n') + '\r\n';
 }
 
-const ics = build();
-const check = process.argv.indexOf('--check') >= 0;
-const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : null;
-
-if (check) {
-  if (current === ics) { console.log('  ok   schedule.ics is up to date'); process.exit(0); }
-  console.log(current === null
+/* -> [ok, message]. check-schedule.js runs this, so a stale feed blocks the deploy. */
+function check() {
+  const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : null;
+  if (current === build()) return [true, '  ok   schedule.ics is up to date'];
+  return [false, current === null
     ? '  ERROR: app/web/schedule.ics does not exist -- run: node tools/make-ics.js'
-    : '  ERROR: app/web/schedule.ics is out of date -- run: node tools/make-ics.js');
-  process.exit(1);
+    : '  ERROR: app/web/schedule.ics is out of date -- run: node tools/make-ics.js'];
 }
 
-fs.writeFileSync(OUT, ics);
-const events = (ics.match(/BEGIN:VEVENT/g) || []).length;
-const alarms = (ics.match(/BEGIN:VALARM/g) || []).length;
-console.log(`wrote app/web/schedule.ics: ${events} events, ${alarms} alarms, ${ics.length} bytes`);
+module.exports = { build, check };
+
+if (require.main === module) {
+  if (process.argv.indexOf('--check') >= 0) {
+    const [ok, msg] = check();
+    console.log(msg);
+    process.exit(ok ? 0 : 1);
+  }
+  const ics = build();
+  fs.writeFileSync(OUT, ics);
+  const events = (ics.match(/BEGIN:VEVENT/g) || []).length;
+  const alarms = (ics.match(/BEGIN:VALARM/g) || []).length;
+  console.log(`wrote app/web/schedule.ics: ${events} events, ${alarms} alarms, ${ics.length} bytes`);
+}

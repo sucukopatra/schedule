@@ -8,7 +8,7 @@ once, ending at a gym block reading 19:30 on the phone, which is what says the
 floating times survived the trip.
 
 Run --dry-run when pointing this anywhere new. Aimed at the wrong collection it
-deletes nothing, but it does add 46 events you would then clear out by hand.
+deletes nothing, but it does add every event in the feed, to be cleared out by hand.
 
     python3 tools/push-dav.py                 # push, using $SCHEDULE_DAV_* or ~/.netrc
     python3 tools/push-dav.py --dry-run       # say what would change, touch nothing
@@ -46,7 +46,8 @@ import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urljoin, urlparse
+from xml.sax.saxutils import escape
 
 DEFAULT_URL = 'https://dav.domatesis.com/ender/schedule/'
 UID_SUFFIX = '@schedule.domatesis.com'
@@ -74,8 +75,8 @@ def say(msg):
 def split_events(text):
     """-> {resource name: single-event VCALENDAR}, keeping every line verbatim.
 
-    The generator never folds a line, so events can be sliced out as-is rather
-    than parsed and rebuilt. Input newlines are normalised because reading the
+    Lines are kept verbatim, folded continuations included, so events can be
+    sliced out as-is rather than parsed and rebuilt. Input newlines are normalised because reading the
     file in text mode turns CRLF into LF; output is always CRLF, which RFC 5545
     requires and some servers enforce."""
     lines = text.replace('\r\n', '\n').split('\n')
@@ -84,8 +85,8 @@ def split_events(text):
     except ValueError:
         die(f'{ICS.name} holds no events -- run: node tools/make-ics.js')
 
-    # Calendar-level properties belong to the collection, not to 46 copies of
-    # one event; the collection's displayname is what clients show.
+    # Calendar-level properties belong to the collection, not repeated in
+    # every event; the collection's displayname is what clients show.
     head = [l for l in head if not l.startswith(('X-WR-CALNAME', 'REFRESH-INTERVAL',
                                                  'X-PUBLISHED-TTL'))]
 
@@ -106,7 +107,7 @@ def split_events(text):
 
 
 def resource_name(uid):
-    """`gym-Mon-19:30@schedule...` -> `gym-Mon-19-30-schedule....ics`.
+    """`gym-Tue-18:30@schedule...` -> `gym-Tue-18-30-schedule....ics`.
 
     Stable, so a re-run updates in place instead of duplicating."""
     return re.sub(r'[^A-Za-z0-9._-]', '-', uid) + '.ics'
@@ -154,24 +155,23 @@ class Dav:
 
     def is_ours(self, href):
         """Only events this repo generated may be deleted."""
-        status, text = self.request('GET', urljoin_host(self.url, href))
+        status, text = self.request('GET', urljoin(self.url, href))
         if status != 200:
             return False
         return UID_SUFFIX in text
 
     def put(self, name, body):
         if self.dry_run:
-            return 'would put'
+            return
         status, text = self.request('PUT', self.url + name, body,
                                     {'Content-Type': 'text/calendar; charset=utf-8'})
         if status not in (200, 201, 204):
             die(f'PUT {name} returned {status}:\n{text.strip()[:400]}')
-        return 'put'
 
     def delete(self, href):
         if self.dry_run:
             return 'would delete'
-        status, text = self.request('DELETE', urljoin_host(self.url, href))
+        status, text = self.request('DELETE', urljoin(self.url, href))
         if status not in (200, 204, 404):
             die(f'DELETE {href} returned {status}:\n{text.strip()[:400]}')
         return 'deleted'
@@ -181,20 +181,12 @@ class Dav:
             return
         body = ('<?xml version="1.0" encoding="utf-8"?>'
                 '<c:mkcalendar xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">'
-                '<d:set><d:prop><d:displayname>' + title + '</d:displayname></d:prop></d:set>'
+                '<d:set><d:prop><d:displayname>' + escape(title) + '</d:displayname></d:prop></d:set>'
                 '</c:mkcalendar>')
         status, text = self.request('MKCALENDAR', self.url, body,
                                     {'Content-Type': 'application/xml'})
         if status not in (201, 204):
             die(f'MKCALENDAR returned {status}:\n{text.strip()[:400]}')
-
-
-def urljoin_host(base, href):
-    """hrefs come back absolute-path; keep the scheme and host from the URL."""
-    if href.startswith('http'):
-        return href
-    p = urlparse(base)
-    return f'{p.scheme}://{p.netloc}{href}'
 
 
 # --- credentials ------------------------------------------------------------
@@ -224,14 +216,22 @@ def credentials(url):
 
 # --- main -------------------------------------------------------------------
 
-def sync_once(dav, ics, title, quiet=False):
+def calendar_name(text):
+    """The feed's X-WR-CALNAME, unescaped: the term, e.g. `Fall 2026`."""
+    m = re.search(r'^X-WR-CALNAME:(.*?)\r?$', text, re.M)
+    return re.sub(r'\\(.)', r'\1', m.group(1)) if m else 'schedule'
+
+
+def sync_once(dav, ics):
     """One full pass. Returns the summary line."""
     if not ics.exists():
         die(f'{ics} is missing -- run: node tools/make-ics.js')
-    want = split_events(ics.read_bytes().decode('utf-8'))
+    text = ics.read_bytes().decode('utf-8')
+    want = split_events(text)
 
     have = dav.listing()
     if have is None:
+        title = calendar_name(text)
         say(f'collection does not exist -- creating it as "{title}"')
         dav.mkcalendar(title)
         have = {}
@@ -254,8 +254,7 @@ def sync_once(dav, ics, title, quiet=False):
         else:
             note = 'left alone (not ours)'
             kept += 1
-        if not quiet:
-            say(f'  {note}: {name}')
+        say(f'  {note}: {name}')
 
     verb = 'would be' if dav.dry_run else 'were'
     return (f'{added} new, {updated} updated, {removed} removed'
@@ -269,7 +268,6 @@ def main():
     ap.add_argument('--ics', default=os.environ.get('SCHEDULE_ICS'), metavar='PATH',
                     help='the feed to push (default: app/web/schedule.ics beside this script)')
     ap.add_argument('--dry-run', action='store_true', help='report, change nothing')
-    ap.add_argument('--title', default='Fall 2026', help='display name if the collection must be created')
     args = ap.parse_args()
 
     ics = Path(args.ics).resolve() if args.ics else ICS
@@ -285,7 +283,7 @@ def main():
         say('dry run: nothing will be written')
 
     try:
-        say(sync_once(dav, ics, args.title))
+        say(sync_once(dav, ics))
     except DavError as e:
         print(f'  ERROR: {e}', file=sys.stderr)
         return 1

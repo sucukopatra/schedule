@@ -192,10 +192,11 @@ one-line edit.
   16 known ISO-8601 dates and confirmed to roll only on Mondays across 400
   consecutive days.
 - `schedule.js` is structurally clean: no reversed or zero-length blocks, none
-  outside the grid, no duplicate ids, no overlaps, no track without a meter.
-- **Every week type has exactly zero slack**: 6 deep slots against 6 category
-  targets in a normal week, 4 against 4 on a trip. Every single slot has to be
-  assigned correctly or the week cannot add up. Exam weeks have 3 gym blocks
+  outside the grid, no duplicate ids, no track without a meter. The only
+  overlaps are Anki inside the trip blocks, which is intended.
+- **Normal and exam weeks have exactly zero slack**: 6 deep slots against 6
+  category targets. Every single slot has to be assigned correctly or the week
+  cannot add up. Trip weeks, since schedule B, have 6 slots for 4 targets. Exam weeks have 3 gym blocks
   for a target of 2, so those have one spare. This is what the plan line exists
   for.
 - The two `review` blocks are tickable but feed no meter. That reads as
@@ -250,8 +251,8 @@ one-line edit.
 - [x] **Date-driven week types.** Done 2026-09-20. `weeks.trip` and
       `weeks.exam` carry an `isoWeeks` list; `rollWeek` sets the type from it
       on the Monday roll and the header buttons still override for that week.
-      Both lists ship **empty** — the actual trip and exam dates are yours to
-      fill in, and nothing changes until you do.
+      Both lists shipped empty; the exam weeks have since been filled in (see
+      *Term dates*), and trip weeks get added as trips are planned.
       `check-schedule.js` rejects a malformed week string and a week claimed by
       two types; `check-sync.js` covers the roll both ways against a temporary
       copy of `schedule.js` that claims a week.

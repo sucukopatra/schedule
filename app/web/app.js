@@ -28,6 +28,12 @@
 
   /* Monday-based day index, and the ISO week the ticks belong to. */
   const dayIndex = (d) => (d.getDay() + 6) % 7;
+  const clock = () => {
+    const d = new Date();
+    return { d, di: dayIndex(d), now: d.getHours() * 60 + d.getMinutes() };
+  };
+  /* '2026-W38' -> 'W38', for labels. */
+  const shortWeek = (w) => w.replace(/^\d+-/, '');
   function isoWeek(d) {
     const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
@@ -64,7 +70,20 @@
   const BY_ID = {};
   BLOCKS.forEach((b) => { BY_ID[b.id] = b; });
 
-  const forWeek = () => BLOCKS.filter((b) => b.weeks.indexOf(state.type) >= 0);
+  const inWeek = (type) => BLOCKS.filter((b) => b.weeks.indexOf(type) >= 0);
+  const forWeek = () => inWeek(state.type);
+
+  /* Every meter, in page order: one per category, gym, then the habit meters.
+     Categories and gym are judged against the week type's target. A habit
+     meter has no target of its own: doing all the ones on the timetable is
+     the target. Only categories hatch the cells that are planned but not done,
+     because only a deep slot is something you chose. */
+  const METERS = [].concat(
+    Object.keys(CATS).map((k) => ({ key: k, label: CATS[k].label, color: CATS[k].color, hatch: true })),
+    [{ key: 'gym', label: 'Gym', color: 'var(--gym)' }],
+    SCHEDULE.habitMeters.map((m) => ({ key: m.track, label: m.label, color: 'var(--ink)', habit: true }))
+  );
+  const targetOf = (m, type, c) => (m.habit ? c.planned : SCHEDULE.weeks[type].targets[m.key] || 0);
   const forDay = (d) => forWeek().filter((b) => b.d === d);
 
   /* ---------- state ---------- */
@@ -155,6 +174,8 @@
   try { view = localStorage.getItem(KEY + ':view') === 'week' ? 'week' : 'today'; } catch (e) { /* default */ }
 
   let status = '';
+  /* The dialog lives under #root, so a render while it is open would wipe it.
+     Anything that re-renders on its own goes through refresh(). */
   let dialogOpen = false;
   let serverOk = false;
   let serverTimer = null;
@@ -184,7 +205,7 @@
         return r.json();
       })
       .then((s) => {
-        if (adopt(s) && !dialogOpen) render();
+        if (adopt(s)) refresh();
         if (needsRollSave) { needsRollSave = false; save(); return; }
         /* Anything ticked while the server was unreachable is still only on
            this device: save() skips the push when serverOk is false, and
@@ -206,7 +227,7 @@
       body: JSON.stringify(state)
     })
       .then((r) => {
-        if (r.status === 409) return r.json().then((s) => { if (adopt(s)) render(); setStatus('Updated from another device'); });
+        if (r.status === 409) return r.json().then((s) => { if (adopt(s)) refresh(); setStatus('Updated from another device'); });
         if (!r.ok) throw new Error('status ' + r.status);
         setStatus('Synced');
       })
@@ -239,22 +260,12 @@
   function counts(s) {
     s = s || state;
     const c = {};
-    const bump = (k, done) => {
-      if (!c[k]) c[k] = { planned: 0, done: 0 };
-      c[k].planned++;
-      if (done) c[k].done++;
-    };
-    Object.keys(CATS).forEach((k) => { c[k] = { planned: 0, done: 0 }; });
-    c.gym = { planned: 0, done: 0 };
-    SCHEDULE.habitMeters.forEach((m) => { c[m.track] = { planned: 0, done: 0 }; });
-
-    BLOCKS.filter((b) => b.weeks.indexOf(s.type) >= 0).forEach((b) => {
-      if (b.kind === 'deep') {
-        const cat = s.slots[b.id];
-        if (cat && c[cat]) bump(cat, s.done[b.id]);
-      } else if (b.track) {
-        bump(b.track, s.done[b.id]);
-      }
+    METERS.forEach((m) => { c[m.key] = { planned: 0, done: 0 }; });
+    inWeek(s.type).forEach((b) => {
+      const key = b.kind === 'deep' ? s.slots[b.id] : b.track;
+      if (!key || !c[key]) return;
+      c[key].planned++;
+      if (s.done[b.id]) c[key].done++;
     });
     return c;
   }
@@ -265,13 +276,8 @@
      against. */
   function snapshot(s) {
     const c = counts(s);
-    const t = (SCHEDULE.weeks[s.type] || { targets: {} }).targets;
     const meters = {};
-    Object.keys(CATS).forEach((k) => { meters[k] = [c[k].done, t[k] || 0]; });
-    meters.gym = [c.gym.done, t.gym || 0];
-    /* Habit meters have no target of their own: doing all the ones on the
-       timetable is the target. */
-    SCHEDULE.habitMeters.forEach((m) => { meters[m.track] = [c[m.track].done, c[m.track].planned]; });
+    METERS.forEach((m) => { meters[m.key] = [c[m.key].done, targetOf(m, s.type, c[m.key])]; });
     return { week: s.week, type: s.type, meters };
   }
 
@@ -304,12 +310,9 @@
 
   function metersHTML() {
     const c = counts();
-    const t = SCHEDULE.weeks[state.type].targets;
-    let h = '<section class="meters" aria-label="This week’s counts">';
-    Object.keys(CATS).forEach((k) => { h += meterHTML(CATS[k].label, CATS[k].color, t[k], c[k], true); });
-    h += meterHTML('Gym', 'var(--gym)', t.gym, c.gym, false);
-    SCHEDULE.habitMeters.forEach((m) => { h += meterHTML(m.label, 'var(--ink)', c[m.track].planned, c[m.track], false); });
-    return h + '</section>';
+    return '<section class="meters" aria-label="This week’s counts">'
+      + METERS.map((m) => meterHTML(m.label, m.color, targetOf(m, state.type, c[m.key]), c[m.key], m.hatch)).join('')
+      + '</section>';
   }
 
   /* Deep sessions are the only thing here you actually choose, and every week
@@ -320,9 +323,7 @@
      filled any more, which is worth saying out loud rather than leaving to be
      discovered on Sunday. */
   function plan() {
-    const d = new Date();
-    const di = dayIndex(d);
-    const now = d.getHours() * 60 + d.getMinutes();
+    const { di, now } = clock();
     const t = SCHEDULE.weeks[state.type].targets;
     const c = counts();
 
@@ -375,20 +376,15 @@
     const weeks = state.history.slice(-HISTORY_SHOWN);
     if (!weeks.length) return '';
 
-    const rows = [];
-    Object.keys(CATS).forEach((k) => rows.push([k, CATS[k].label, CATS[k].color]));
-    rows.push(['gym', 'Gym', 'var(--gym)']);
-    SCHEDULE.habitMeters.forEach((m) => rows.push([m.track, m.label, 'var(--ink)']));
-
     let h = `<section class="history" aria-label="Recent weeks"><h2>Recent weeks</h2>`;
-    rows.forEach(([key, label, color]) => {
+    METERS.forEach(({ key, label, color }) => {
       let cells = '';
       weeks.forEach((w) => {
         const m = w.meters[key];
         const done = m ? m[0] : 0;
         const target = m ? m[1] : 0;
         const cls = !m || !target ? 'none' : done >= target ? 'met' : done ? 'part' : 'miss';
-        const week = w.week.replace(/^\d+-/, '');
+        const week = shortWeek(w.week);
         cells += `<span class="hcell ${cls}" title="${esc(week + ' · ' + done + ' of ' + target)}"></span>`;
       });
       const last = weeks[weeks.length - 1].meters[key];
@@ -396,23 +392,28 @@
         <span class="hcells" role="img" aria-label="${esc(label + ', last ' + weeks.length + ' weeks')}">${cells}</span>
         <span class="hlast">${last ? last[0] + '/' + last[1] : '–'}</span></div>`;
     });
-    const span = weeks.length === 1 ? weeks[0].week.replace(/^\d+-/, '')
-      : weeks[0].week.replace(/^\d+-/, '') + '–' + weeks[weeks.length - 1].week.replace(/^\d+-/, '');
+    const first = shortWeek(weeks[0].week);
+    const last = shortWeek(weeks[weeks.length - 1].week);
+    const span = weeks.length === 1 ? first : first + '–' + last;
     return h + `<p class="hfoot">${esc(span)}, oldest first. Last column is the most recent week.</p></section>`;
   }
 
   /* ---------- Today view ---------- */
 
-  function rowHTML(b, now) {
+  /* peek: the read-only look at tomorrow, where nothing is ticked, nothing is
+     past, and an open session is not an invitation to tap. */
+  function rowHTML(b, now, peek) {
     const f = face(b);
-    const done = !!state.done[b.id];
-    const past = b.e <= now;
+    const tickable = b.tickable && !peek;
+    const done = tickable && !!state.done[b.id];
+    const past = !peek && b.e <= now;
+    const note = peek && b.kind === 'deep' && !state.slots[b.id] ? 'Not chosen yet' : f.note;
     const cls = ['row', 'k-' + b.kind, done ? 'is-done' : '', past && !done ? 'past' : ''].join(' ');
     const style = f.color ? `--c:${f.color}` : '';
     const inner = `<span class="rtime">${hhmm(b.s)}</span>
-      <span class="rbody"><span class="rtitle">${esc(f.title)}</span>${f.note ? `<span class="rnote">${esc(f.note)}</span>` : ''}</span>
-      ${b.tickable ? `<span class="rtick" aria-hidden="true"></span>` : ''}`;
-    if (!b.tickable) return `<div class="${cls}" style="${style}">${inner}</div>`;
+      <span class="rbody"><span class="rtitle">${esc(f.title)}</span>${note ? `<span class="rnote">${esc(note)}</span>` : ''}</span>
+      ${tickable ? `<span class="rtick" aria-hidden="true"></span>` : ''}`;
+    if (!tickable) return `<div class="${cls}" style="${style}">${inner}</div>`;
     const label = `${f.title}, ${hhmm(b.s)} to ${hhmm(b.e)}${done ? ', done' : ''}`;
     return `<button type="button" class="${cls}" style="${style}" data-id="${b.id}" data-kind="${b.kind}"
       aria-pressed="${done}" aria-label="${esc(label)}">${inner}</button>`;
@@ -463,26 +464,15 @@
     /* Sunday's tomorrow is next week's Monday, and a week always starts as
        whatever the calendar says, which is normal unless a type claims it. */
     const type = di === 0 ? typeForWeek(isoWeek(new Date(Date.now() + 86400000))) : state.type;
-    const blocks = BLOCKS.filter((b) => b.d === di && b.weeks.indexOf(type) >= 0);
+    const blocks = inWeek(type).filter((b) => b.d === di);
     if (!blocks.length) return '';
 
-    let h = `<section class="rows tomorrow"><h2>Tomorrow · ${esc(LONG[di])}</h2>`;
-    blocks.forEach((b) => {
-      const f = face(b);
-      /* face() invites a tap on an open session. Not from here. */
-      const note = b.kind === 'deep' && !state.slots[b.id] ? 'Not chosen yet' : f.note;
-      h += `<div class="row k-${b.kind}" style="${f.color ? `--c:${f.color}` : ''}">
-        <span class="rtime">${hhmm(b.s)}</span>
-        <span class="rbody"><span class="rtitle">${esc(f.title)}</span>${note ? `<span class="rnote">${esc(note)}</span>` : ''}</span>
-      </div>`;
-    });
-    return h + '</section>';
+    return `<section class="rows tomorrow"><h2>Tomorrow · ${esc(LONG[di])}</h2>`
+      + blocks.map((b) => rowHTML(b, 0, true)).join('') + '</section>';
   }
 
   function todayHTML() {
-    const d = new Date();
-    const di = dayIndex(d);
-    const now = d.getHours() * 60 + d.getMinutes();
+    const { di, now } = clock();
     const today = forDay(di);
     const current = currentBlock(today, now);
     /* Every block lands in exactly one of these. A block that has started but
@@ -494,15 +484,10 @@
     const earlier = today.filter((b) => b.e <= now);
 
     let h = nowCardHTML(today, now, current);
-    if (running.length) {
-      h += '<section class="rows"><h2>Also on now</h2>' + running.map((b) => rowHTML(b, now)).join('') + '</section>';
-    }
-    if (later.length) {
-      h += '<section class="rows"><h2>Still to come</h2>' + later.map((b) => rowHTML(b, now)).join('') + '</section>';
-    }
-    if (earlier.length) {
-      h += '<section class="rows earlier"><h2>Earlier today</h2>' + earlier.map((b) => rowHTML(b, now)).join('') + '</section>';
-    }
+    [['Also on now', running, 'rows'], ['Still to come', later, 'rows'], ['Earlier today', earlier, 'rows earlier']]
+      .forEach(([title, list, cls]) => {
+        if (list.length) h += `<section class="${cls}"><h2>${title}</h2>` + list.map((b) => rowHTML(b, now)).join('') + '</section>';
+      });
     if (!today.length) h += '<section class="rows"><p class="empty">Nothing scheduled today.</p></section>';
     return h + tomorrowHTML() + metersHTML() + planHTML() + historyHTML();
   }
@@ -525,9 +510,7 @@
   }
 
   function weekHTML() {
-    const d = new Date();
-    const today = dayIndex(d);
-    const now = d.getHours() * 60 + d.getMinutes();
+    const { di: today, now } = clock();
     const span = GRID_END - GRID_START;
     const px = (m) => ((m - GRID_START) / 60) * HOUR_PX;
     const height = (span / 60) * HOUR_PX;
@@ -545,15 +528,15 @@
     h += '</div>';
 
     const lightsOut = mins(SCHEDULE.lightsOut);
-    for (let d2 = 0; d2 < 7; d2++) {
-      const wake = mins(d2 < 5 ? SCHEDULE.wake.weekday : SCHEDULE.wake.weekend);
+    for (let d = 0; d < 7; d++) {
+      const wake = mins(d < 5 ? SCHEDULE.wake.weekday : SCHEDULE.wake.weekend);
       h += `<div class="col" style="height:${height}px">`;
       h += `<div class="sleep" style="top:0;height:${px(wake)}px" title="Sleep until ${hhmm(wake)}"></div>`;
       h += `<div class="sleep" style="top:${px(lightsOut)}px;height:${height - px(lightsOut)}px" title="Lights out ${hhmm(lightsOut)}"></div>`;
-      const day = forDay(d2);
+      const day = forDay(d);
       day.filter((b) => b.kind === 'trip').forEach((b) => { h += gridBlockHTML(b); });
       day.filter((b) => b.kind !== 'trip').forEach((b) => { h += gridBlockHTML(b); });
-      if (d2 === today && now >= GRID_START && now < GRID_END) {
+      if (d === today && now >= GRID_START && now < GRID_END) {
         h += `<div class="nowline" style="top:${px(now)}px"></div>`;
       }
       h += '</div>';
@@ -563,9 +546,10 @@
 
   /* ---------- shell ---------- */
 
+  const refresh = () => { if (!dialogOpen) render(); };
+
   function render() {
-    const d = new Date();
-    const di = dayIndex(d);
+    const { d, di } = clock();
     let h = '<div class="wrap"><header class="top">';
     h += `<div class="ident"><div class="date">${LONG[di]} ${d.getDate()} ${MONTHS[d.getMonth()]}</div>
       <div class="term">${esc(SCHEDULE.term)}</div></div>`;
@@ -615,6 +599,11 @@
     if (el) el.focus({ preventScroll: true });
   }
 
+  const toggleDone = (id) => {
+    if (state.done[id]) delete state.done[id];
+    else state.done[id] = true;
+  };
+
   function openDeep(id) {
     const b = BY_ID[id];
     const picked = state.slots[id] || '';
@@ -648,8 +637,7 @@
     });
     dlg.querySelector('#dlg-done').addEventListener('click', () => {
       if (!state.slots[id]) return;
-      if (state.done[id]) delete state.done[id];
-      else state.done[id] = true;
+      toggleDone(id);
       changed = true;
       dlg.close();
     });
@@ -686,8 +674,7 @@
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
         if (btn.getAttribute('data-kind') === 'deep') { openDeep(id); return; }
-        if (state.done[id]) delete state.done[id];
-        else state.done[id] = true;
+        toggleDone(id);
         render();
         save();
       });
@@ -699,12 +686,12 @@
      this the Now card keeps showing whatever was running at lock time. */
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
-    if (!dialogOpen) render();
+    refresh();
     pull();
   });
 
   status = 'Tap a deep session to choose what goes in it.';
   render();
   pull();
-  setInterval(() => { if (!dialogOpen) render(); }, 60000);
+  setInterval(refresh, 60000);
 })();

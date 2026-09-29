@@ -17,10 +17,16 @@ const path = require('path');
 const drive = require('./harness.js');
 const webDir = process.argv[2] || undefined;
 
-/* Date-driven week types only do anything if schedule.js names some weeks, and
-   the real one deliberately names none -- the trip and exam dates are the
-   user's to fill in. So build a copy that claims one. Appending beats editing:
-   it does not care how the file is formatted. */
+/* Every case runs at a fixed moment, in a week the real schedule.js leaves
+   normal. Following the real clock made the roll cases fail whenever the
+   check was run during an exam week. */
+const NOW = new Date(2026, 8, 23, 12, 0).getTime();   // Wed 23 Sep 2026
+const W = '2026-W39';
+const LAST = '2026-W38';
+
+/* The real schedule.js claims only exam weeks, and W is not one of them. To
+   see a roll pick up a claimed week, build a copy that claims W. Appending
+   beats editing: it does not care how the file is formatted. */
 function webClaiming(type, week) {
   const src = webDir || path.join(__dirname, '..', 'app', 'web');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'schedule-check-'));
@@ -30,25 +36,6 @@ function webClaiming(type, week) {
   return dir;
 }
 
-function isoWeekNow() {
-  const d = new Date();
-  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
-  const jan1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
-  return t.getUTCFullYear() + '-W' + String(Math.ceil(((t - jan1) / 86400000 + 1) / 7)).padStart(2, '0');
-}
-
-const W = isoWeekNow();
-/* The ISO week before this one, for the roll cases. */
-function isoWeekBack(n) {
-  const d = new Date();
-  d.setDate(d.getDate() - 7 * n);
-  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
-  const jan1 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
-  return t.getUTCFullYear() + '-W' + String(Math.ceil(((t - jan1) / 86400000 + 1) / 7)).padStart(2, '0');
-}
-const LAST = isoWeekBack(1);
 const base = { v: 2, week: W, type: 'normal', slots: {}, done: {} };
 const OLD = { ...base, savedAt: 1000 };
 const MINE = { ...base, done: { 'gym-Tue-18:30': true }, savedAt: 9000 };
@@ -64,7 +51,7 @@ const CASES = [
   { name: 'D. in step with the server', state: { serverState: MINE, localState: MINE },
     put: false, why: 'nothing to say' },
   { name: 'E. fresh page, nothing ticked, server empty', state: { serverState: null, localState: null },
-    put: false, why: 'must not create a state.json for an untouched week' },
+    put: false, noLocalWrite: true, why: 'must not create a state.json for an untouched week' },
   { name: 'F. fresh page, nothing ticked, server has state', state: { serverState: MINE, localState: null },
     put: false, savedAt: 9000, why: 'take the server copy, write nothing back' },
   { name: 'G. state naming blocks that no longer exist',
@@ -113,13 +100,13 @@ CASES.push(
 (async () => {
   let bad = 0;
   for (const c of CASES) {
-    const got = await drive({ ...c.state, webDir });
+    const got = await drive({ ...c.state, now: NOW, webDir });
     const fails = [];
     if (got.put !== c.put) fails.push(`PUT ${got.put ? 'was' : 'was not'} issued, expected ${c.put ? 'it' : 'none'}`);
     if ('savedAt' in c && (!got.stored || got.stored.savedAt !== c.savedAt)) {
       fails.push(`savedAt ${got.stored && got.stored.savedAt}, expected ${c.savedAt}`);
     }
-    if (c.put === false && c.name.startsWith('E') && got.stored) fails.push('wrote to localStorage, expected nothing');
+    if (c.noLocalWrite && got.stored) fails.push('wrote to localStorage, expected nothing');
     for (const key of ['slots', 'done']) {
       if (!c[key]) continue;
       const got_ = JSON.stringify((got.stored || {})[key]);
@@ -151,11 +138,12 @@ CASES.push(
   }
   /* The real schedule.js names the midterm and finals weeks, so check those
      dates are actually picked up rather than only the mechanism. */
-  for (const [label, when, week, want] of [
+  const DATES = [
     ['N. a midterm week, from the real schedule.js', new Date(2026, 10, 3), '2026-W45', 'exam'],
     ['O. a finals week, from the real schedule.js', new Date(2026, 11, 15), '2026-W51', 'exam'],
     ['P. an ordinary teaching week', new Date(2026, 10, 10), '2026-W46', 'normal'],
-  ]) {
+  ];
+  for (const [label, when, week, want] of DATES) {
     const r = await drive({
       serverState: { ...FINISHED_V2, week: '2026-W40', type: 'trip' },
       now: when.getTime(), webDir,
@@ -167,16 +155,17 @@ CASES.push(
 
   /* Rolling into a week the calendar claims picks that type up; rolling into
      one nothing claims goes back to normal. */
-  for (const [label, dir, want] of [
+  const ROLLS = [
     ['L. rolls into a week the calendar claims', webClaiming('exam', W), 'exam'],
     ['M. rolls into a week nothing claims', undefined, 'normal'],
-  ]) {
-    const r = await drive({ serverState: { ...FINISHED_V2, type: 'trip' }, webDir: dir || webDir });
+  ];
+  for (const [label, dir, want] of ROLLS) {
+    const r = await drive({ serverState: { ...FINISHED_V2, type: 'trip' }, now: NOW, webDir: dir || webDir });
     if (r.stored && r.stored.type === want) console.log(`  ok   ${label} -- type is ${want}`);
     else { bad++; console.log(`  FAIL ${label}\n       type ${r.stored && r.stored.type}, expected ${want}`); }
     if (dir) fs.rmSync(dir, { recursive: true, force: true });
   }
 
-  console.log(bad ? `\n${bad} sync case(s) failed` : `\nall ${CASES.length + 5} sync cases correct`);
+  console.log(bad ? `\n${bad} sync case(s) failed` : `\nall ${CASES.length + DATES.length + ROLLS.length} sync cases correct`);
   process.exit(bad ? 1 : 0);
 })();

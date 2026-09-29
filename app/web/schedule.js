@@ -25,7 +25,6 @@
 
 var SCHEDULE = {
   term: 'Fall 2026',
-  tagline: 'Classes and anchors stay put. Deep sessions are yours to fill, as long as the counts add up by Sunday.',
 
   gridStart: '07:00',
   gridEnd:   '24:00',

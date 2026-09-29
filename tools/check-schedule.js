@@ -11,24 +11,11 @@
    trips are meant to overlap, and a tickable block with no track is meant to
    be tickable without counting. */
 'use strict';
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
+const { DAYS, TICKABLE, mins, hhmm, loadSchedule, daysOf, expand, isoWeek } = require('./lib.js');
 
-/* schedule.js is a bare `var SCHEDULE = {...}` meant for a <script> tag, so
-   run it in a throwaway context and take the global back out. */
-const FILE = process.argv[2] || path.join(__dirname, '..', 'app', 'web', 'schedule.js');
-const sandbox = {};
-vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync(FILE, 'utf8'), sandbox);
-const SCHEDULE = sandbox.SCHEDULE;
-
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const TICKABLE = ['deep', 'gym', 'habit', 'review'];
+const SCHEDULE = loadSchedule(process.argv[2]);
 const KINDS = TICKABLE.concat(['class', 'anchor', 'trip', 'light']);
 const WEEK_TYPES = Object.keys(SCHEDULE.weeks);
-const mins = (s) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
-const hhmm = (m) => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 const at = (b) => `${hhmm(b.s)}-${hhmm(b.e)}`;
 const GRID_START = mins(SCHEDULE.gridStart);
 const GRID_END = mins(SCHEDULE.gridEnd);
@@ -38,23 +25,16 @@ const notes = [];
 const err = (...a) => errors.push(a.join(' '));
 const note = (...a) => notes.push(a.join(' '));
 
-/* Expand exactly the way app.js does. */
-const B = [];
-SCHEDULE.blocks.forEach((b) => {
-  if (!/^\d\d:\d\d-\d\d:\d\d$/.test(b.at || '')) return err('bad "at":', JSON.stringify(b.at), '-', b.title);
+/* A block with an unreadable "at" is reported and left out of the expansion,
+   so the rest can still be checked. */
+const valid = SCHEDULE.blocks.filter((b) => {
+  if (!/^\d\d:\d\d-\d\d:\d\d$/.test(b.at || '')) { err('bad "at":', JSON.stringify(b.at), '-', b.title); return false; }
   if (KINDS.indexOf(b.kind) < 0) err('unknown kind:', b.kind, '-', b.title);
   (b.weeks || []).forEach((w) => { if (!SCHEDULE.weeks[w]) err('unknown week type:', w, '-', b.title); });
-  const days = b.day === '*' ? DAYS : [].concat(b.day);
-  const [from, to] = b.at.split('-');
-  days.forEach((name) => {
-    if (DAYS.indexOf(name) < 0) return err('unknown day:', name, '-', b.title);
-    B.push({
-      d: DAYS.indexOf(name), s: mins(from), e: mins(to), kind: b.kind, title: b.title,
-      track: b.track || '', weeks: b.weeks || WEEK_TYPES,
-      tickable: TICKABLE.indexOf(b.kind) >= 0, id: b.kind + '-' + name + '-' + from,
-    });
-  });
+  daysOf(b).forEach((name) => { if (DAYS.indexOf(name) < 0) err('unknown day:', name, '-', b.title); });
+  return true;
 });
+const B = expand({ ...SCHEDULE, blocks: valid });
 
 B.forEach((b) => {
   if (b.e <= b.s) err('ends before it starts:', b.id, b.title, at(b));
@@ -145,10 +125,26 @@ if (errors.length) process.exit(1);
 
 /* schedule.ics is generated from this file and goes stale the moment it
    changes, so the deploy checks are where that gets caught. */
-if (!process.argv[2]) {
-  const r = require('child_process').spawnSync(process.execPath,
-    [require('path').join(__dirname, 'make-ics.js'), '--check'], { encoding: 'utf8' });
-  process.stdout.write(r.stdout || '');
-  if (r.status !== 0) process.exit(1);
-}
-process.exit(0);
+if (process.argv[2]) process.exit(0);
+const [icsOk, icsMsg] = require('./make-ics.js').check();
+console.log(icsMsg);
+if (!icsOk) process.exit(1);
+
+/* app.js expands the blocks itself, since the page has no build step to share
+   lib.js with. Ticks are stored under those ids, so make sure it still arrives
+   at the same ones: the week grid puts a data-id on every tickable block. */
+(async () => {
+  const drive = require('./harness.js');
+  const bad = [];
+  for (const t of WEEK_TYPES) {
+    const r = await drive({ view: 'week', serverState: { v: 3, week: isoWeek(new Date()), type: t, savedAt: 1 } });
+    const got = [...r.html.matchAll(/data-id="([^"]+)"/g)].map((m) => m[1]).sort();
+    const want = B.filter((b) => b.tickable && b.weeks.indexOf(t) >= 0).map((b) => b.id).sort();
+    if (got.join() !== want.join()) {
+      bad.push(`${t}: app.js only ${got.filter((x) => want.indexOf(x) < 0).join(', ') || '-'}; lib.js only ${want.filter((x) => got.indexOf(x) < 0).join(', ') || '-'}`);
+    }
+  }
+  bad.forEach((m) => console.log('  ERROR: block ids differ in', m));
+  if (!bad.length) console.log('  ok   app.js and tools/lib.js agree on block ids');
+  process.exit(bad.length ? 1 : 0);
+})();

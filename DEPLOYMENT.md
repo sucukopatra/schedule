@@ -50,11 +50,14 @@ Server layout today:
 │       ├── app.js
 │       ├── sw.js
 │       ├── manifest.webmanifest
+│       ├── schedule.ics
 │       ├── icon.svg
 │       ├── icon-192.png
 │       ├── icon-512.png
 │       ├── icon-maskable.png
 │       └── apple-touch-icon.png
+├── tools/
+│   └── push-dav.py     # run by deploy.sh, inside the container
 └── data/
     └── state.json      # live personal data, never touch
 ```
@@ -85,10 +88,7 @@ generated thing, and they are committed, not built at deploy time:
 
 - `index.html` — document shell: head, `<div id="root">`, tags for the other
   files, and the service worker registration. `schedule.js` must load before
-  `app.js`. It carries no state: an empty default used to sit in a
-  `<script type="application/json">` block, but nothing ever templated it, so
-  it was always the same empty object and the comparison against it was always
-  won by whatever localStorage held.
+  `app.js`.
 - `style.css` — all CSS, mobile-first, colour tokens on `:root` for light/dark.
 - `schedule.js` — **the timetable, and the only file you edit to change it.**
   Pure data: one `SCHEDULE` object with term settings, week types and their
@@ -151,7 +151,7 @@ node tools/make-ics.js --check   # exit 1 if it is out of date
 
 Like the icons it is generated and committed rather than built on the way out —
 but unlike the icons it goes stale every time the timetable changes, so
-`check-schedule.js` runs `--check` and the pre-deploy checks catch it.
+`check-schedule.js` runs the same check and the deploy refuses a stale one.
 
 - Lead times come from `SCHEDULE.alarms`, keyed by kind. A kind that is not
   listed gets no alarm, which is why `habit` is absent.
@@ -258,7 +258,7 @@ The one-time setup is a `Calendar` collection at `/ender/schedule/`, the `.env`
 entry, and enabling the calendar in DAVx⁵ and Fossify. A `~/.netrc` on the
 laptop is needed only if you want to run the push by hand.
 
-- One resource per event, named from the UID (`gym-Mon-19-30-schedule....ics`),
+- One resource per event, named from the UID (`gym-Tue-18-30-schedule....ics`),
   so a re-run updates in place rather than duplicating.
 - **Deletion is scoped.** Anything in the collection missing from the feed is
   removed, but only after fetching it and confirming its UID ends
@@ -278,11 +278,11 @@ reminders* permission and an exemption from battery optimisation, or they fire
 late or not at all.
 
 **What is actually proven.** Against a throwaway Radicale 3.8.0: the collection
-is created, 46 events land one file each, a re-run reports `0 new, 46 updated`
-with no duplicates, a planted stale `gym-Thu-18:15` is deleted, a hand-added
+is created, every event lands as one file, a re-run reports nothing new and
+everything updated with no duplicates, a planted stale `gym-Thu-18:15` is deleted, a hand-added
 event is left alone, and `DTSTART`, `RRULE` and `VALARM` all round-trip with no
 `TZID` injected. Aimed at a collection holding three unrelated events it deleted
-none of them -- but it did add its own 46, taking that collection to 49 items.
+none of them -- but it did add all of its own alongside them.
 It cannot destroy anything; it can still make a mess. Hence `--dry-run`.
 
 On the real server the whole chain has been walked once, ending at a Monday
@@ -305,6 +305,7 @@ by hand as type *Calendar* and re-run: the script only creates one when
 - **Week** is the full seven-day grid, mainly useful on a desktop.
 
 Both views end with the counts, the plan line and the recent-weeks strip.
+Which view is showing is remembered per device in localStorage, not synced.
 
 The tomorrow peek is deliberately not tickable: tomorrow's ticks are
 tomorrow's business, and a deep session that has not been assigned reads
@@ -331,12 +332,10 @@ page would tell you. The line under the meters is what closes that gap:
   slack that means the week has already stopped adding up. Better said on
   Tuesday than discovered on Sunday.
 
-The choice is remembered per device in localStorage, not synced.
-
 ### Block ids and ticks
 
 Tickable kinds are `deep`, `gym`, `habit` and `review`. Each gets a stable id
-from its kind, day and start time (`gym-Mon-19:30`), so ids are never written by
+from its kind, day and start time (`gym-Tue-18:30`), so ids are never written by
 hand and can never collide. Moving a block in `schedule.js` changes its id and
 so drops that week's tick for it, which is normally what you want.
 
@@ -345,7 +344,7 @@ so drops that week's tick for it, which is normally what you want.
 ```json
 { "v": 3, "week": "2026-W38", "type": "normal",
   "slots": { "deep-Thu-16:00": "coursework" },
-  "done":  { "gym-Mon-19:30": true },
+  "done":  { "gym-Tue-18:30": true },
   "history": [
     { "week": "2026-W37", "type": "normal",
       "meters": { "coursework": [3, 3], "gym": [2, 3], "german": [6, 7] } }
@@ -361,10 +360,10 @@ the plan carries over, and sets `type` from the calendar — so there is no
 A week type can claim ISO weeks in `schedule.js` (`weeks.exam.isoWeeks`), and a
 week nothing claims is normal. The type is set when the week rolls over, so
 adding a week to that list mid-week does nothing until the next Monday; the
-buttons in the header still override it for the rest of the week. Both lists
-ship empty — the trip and exam dates are yours to fill in, and
-`tools/check-schedule.js` will complain if two types claim the same week. Unknown and missing fields are dropped
-on load, so a malformed or outdated `state.json` degrades to an empty week
+buttons in the header still override it for the rest of the week. The exam
+weeks are filled in; trip weeks get added as trips are planned, and
+`tools/check-schedule.js` will complain if two types claim the same week.
+Unknown and missing fields are dropped on load, so a malformed or outdated `state.json` degrades to an empty week
 rather than breaking the page.
 
 Each `history` entry is one finished week, `[done, target]` per meter, capped
@@ -440,42 +439,23 @@ a clone. It runs `check-schedule.js` first and refuses to ship if that fails --
 quietly when it passes, since the notes it prints on a clean run are not deploy
 news. A stale `schedule.ics` is the case that earns the guard: it now reaches
 the phone as real reminders, so the symptom is an alarm at last term's time
-rather than a page that looks wrong, and nothing downstream would catch it. It rsyncs `app/`, which the container serves, and `tools/push-dav.py`,
-which the calendar sidecar runs; `data/` is never a target, so the ticks cannot
-be reached by a `--delete`. For reference, what it does:
-
-```bash
-schedule-deploy() {
-  local src=~/dev/server/schedule
-  local dest=bmo:/srv/docker/config/caddy/webpages/schedule/app/
-  local out
-  out=$(rsync -az --delete --itemize-changes "$src/app/" "$dest") || return 1
-  if [[ -z "$out" ]]; then
-    echo "Nothing changed."
-  else
-    echo "$out"
-    if grep -q 'server\.py' <<<"$out"; then
-      ssh bmo 'cd /srv/docker && docker compose up -d --force-recreate schedule' \
-        && echo "Recreated schedule (server.py changed)."
-    fi
-  fi
-  # Keep the phone's calendar in step with what was just deployed.
-  python3 "$src/tools/push-dav.py" \
-    || echo "Calendar push failed. The page is live; phone reminders are stale."
-}
-```
+rather than a page that looks wrong, and nothing downstream would catch it.
+Then it rsyncs `app/`, which the container serves, and `tools/push-dav.py`,
+which the push at the end runs. The script itself is commented step by step;
+the points worth knowing without reading it:
 
 - The rsync target is `app/` only, so `--delete` can never reach `data/`.
-- The calendar push runs **unconditionally**, including on a deploy that
-  changed nothing. It is idempotent, so that costs a few seconds and heals a
-  collection that drifted -- which is the whole point of it being here rather
-  than in your head. It deliberately never sets `$?`: a push failure is not a
-  deploy failure, because the page is already live and only the reminders are
-  stale. It needs a `~/.netrc` entry for `dav.domatesis.com` or it will stop
-  and prompt on every deploy.
+- The calendar push runs on bmo, inside the `schedule` container, with the
+  credentials from `/srv/docker/.env` (see *The CalDAV route* above). The
+  laptop needs no `~/.netrc` for it.
+- The push runs **unconditionally**, including on a deploy that changed
+  nothing. It is idempotent, so that costs a few seconds and heals a
+  collection that drifted, and a push that failed once is retried by simply
+  deploying again. A push failure is reported but does not fail the deploy,
+  because the page is already live and only the reminders are stale.
 - The trailing slash on `"$src/app/"` matters; without it rsync creates `app/app/`.
 - Page changes need no restart. Changes to `server.py` need the container
-  recreated, which the function does automatically.
+  recreated, which `deploy.sh` does automatically.
 - Use `docker compose up -d --force-recreate schedule`. Both halves matter:
   - Not `docker restart schedule`. The service is defined in
     `stacks/schedule.yml` and included by `compose.yml`; `restart` fails
@@ -541,7 +521,7 @@ workers are also disabled in private windows.
 
 ### Checks
 
-Three scripts in `tools/`, no dependencies beyond `node`, `python3` and `curl`.
+Four checks in `tools/`, no dependencies beyond `node`, `python3` and `curl`.
 They live outside `app/`, so they are never deployed. Run them before a deploy;
 each exits non-zero on a failure.
 
@@ -557,11 +537,15 @@ tools/check-server.sh          # the HTTP contract, on a throwaway DATA_DIR
   no meter, a week whose targets cannot be met by the slots on offer. Overlaps
   and tickable-but-uncounted blocks are printed as notes, not errors, because
   trips are meant to overlap and the reviews are meant to be tickable without
-  counting.
+  counting. It also confirms `schedule.ics` is current, and that `app.js`
+  still derives the same block ids as `tools/lib.js`: the page keeps its own
+  copy of the expansion because it has no build step, and ticks are stored
+  under those ids.
 - **check-sync.js** runs the real `app.js` against a fake server under a small
   DOM stub. It pins both halves of the contract: work done offline gets pushed
   once the server is back, and a page where nothing was ticked never writes a
-  `state.json`.
+  `state.json`. It runs at a fixed date, so it passes the same way in an exam
+  week as in any other.
 - **check-plan.js** pins each branch of the plan line and the fill: that the
   result adds up, that it works around slots already chosen, and that it is the
   same every time.
@@ -570,7 +554,10 @@ tools/check-server.sh          # the HTTP contract, on a throwaway DATA_DIR
   filename too long for the filesystem, and a non-numeric `Content-Length` —
   and asserts the log holds no tracebacks.
 
-`check-sync.js` and `check-plan.js` share `tools/harness.js`, which runs the
+The Node tools share `tools/lib.js`: loading `schedule.js`, expanding its
+blocks into per-day blocks with ids, ISO weeks, and the week-type rule.
+
+`check-sync.js`, `check-plan.js` and `check-schedule.js` use `tools/harness.js`, which runs the
 real `app.js` against a fake server and a DOM small enough to be honest about
 what it is: it parses the rendered HTML back into tags and hands out fakes that
 record their listeners, which is enough to render, read what was rendered, and
