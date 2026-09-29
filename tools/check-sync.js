@@ -5,9 +5,9 @@
      node tools/check-sync.js             # exits 1 if any case is wrong
      node tools/check-sync.js other/web   # check a copy of web/ instead
 
-   The case that matters is B. pull() used to push only when the server had no
-   state at all, so edits made offline were stranded while the status line said
-   "Synced", until another device saved and quietly won. E and F are the other
+   The case that matters most is B: edits made offline must reach the server
+   once it is back, even when the server holds an older state, rather than sit
+   on one device under a status line saying "Synced". E and F are the other
    half of the contract: a page where nothing was ticked must never write a
    state.json. */
 'use strict';
@@ -18,8 +18,7 @@ const drive = require('./harness.js');
 const webDir = process.argv[2] || undefined;
 
 /* Every case runs at a fixed moment, in a week the real schedule.js leaves
-   normal. Following the real clock made the roll cases fail whenever the
-   check was run during an exam week. */
+   normal, so the roll cases pass the same way in an exam week. */
 const NOW = new Date(2026, 8, 23, 12, 0).getTime();   // Wed 23 Sep 2026
 const W = '2026-W39';
 const LAST = '2026-W38';
@@ -45,7 +44,7 @@ const CASES = [
   { name: 'A. server empty, this device has work', state: { serverState: null, localState: MINE },
     put: true, why: 'nothing on the server yet, so send it' },
   { name: 'B. offline edits, server holds an OLDER state', state: { serverState: OLD, localState: MINE },
-    put: true, why: 'the regression: this used to stay silent and strand the work' },
+    put: true, why: 'the offline work is pushed, not stranded' },
   { name: 'C. server is ahead', state: { serverState: AHEAD, localState: OLD },
     put: false, savedAt: 99000, why: 'adopt the server copy, send nothing' },
   { name: 'D. in step with the server', state: { serverState: MINE, localState: MINE },

@@ -3,34 +3,28 @@
 #
 #     tools/deploy.sh
 #
-# This lives in the repo rather than in ~/.zshrc so that a reinstalled laptop
-# needs nothing but a clone of this repo to deploy again. Two things go up:
-# app/, which the container serves, and tools/push-dav.py, which the push at
-# the end runs. Neither rsync can reach data/, where the ticks live.
-#
-# The calendar push runs on bmo, not here, through the schedule container that
-# already exists -- it is already on the `core` network and already mounts the
-# feed. The credentials live on bmo too, so this laptop holds nothing the
-# server needs.
+# Two things go up: app/, which the container serves, and tools/push-dav.py,
+# which the push at the end runs. Neither rsync can reach data/, where the
+# ticks live. The push runs on bmo, inside the schedule container, with the
+# credentials it already carries, so this laptop holds nothing the server needs.
 set -eu
 
 host=${SCHEDULE_HOST:-bmo}
 root=${SCHEDULE_ROOT:-/srv/docker/config/caddy/webpages/schedule}
 src=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
-# Refuse to ship a stale or broken timetable. check-schedule.js is the only
-# thing that validates schedule.js at all -- nothing does so at runtime -- and
-# it also fails when schedule.ics no longer matches it. That second half is
-# what earns it a place here: a stale .ics is now pushed to the phone as real
-# reminders, so the failure is an alarm at last term's time rather than a page
-# that looks wrong. Nothing downstream would ever catch it.
-#
-# Quiet unless it fails: the notes it prints on a clean run are not deploy news.
-if ! checks=$(node "$src/tools/check-schedule.js" 2>&1); then
-  printf '%s\n' "$checks"
-  echo "Refusing to deploy. Fix the above; a stale .ics is: node tools/make-ics.js"
-  exit 1
-fi
+# Refuse to ship anything the checks reject. check-schedule.js matters most:
+# nothing validates schedule.js at runtime, and it fails when schedule.ics no
+# longer matches it, which would reach the phone as alarms at the wrong time.
+# Quiet unless one fails: the notes they print on a clean run are not deploy news.
+for check in "node tools/check-schedule.js" "node tools/check-sync.js" \
+             "node tools/check-plan.js" "tools/check-server.sh"; do
+  if ! out=$(cd "$src" && $check 2>&1); then
+    printf '%s\n' "$out"
+    echo "Refusing to deploy: $check failed. A stale .ics is: node tools/make-ics.js"
+    exit 1
+  fi
+done
 
 # --delete is safe here only because the target is app/, never the parent.
 app_out=$(rsync -az --delete --itemize-changes "$src/app/" "$host:$root/app/")
@@ -41,9 +35,8 @@ app_out=$(rsync -az --delete --itemize-changes "$src/app/" "$host:$root/app/")
 ssh "$host" "mkdir -p '$root/tools'"
 tools_out=$(rsync -az --itemize-changes "$src/tools/push-dav.py" "$host:$root/tools/")
 
-# Deliberately not an early exit. The push below has to run even when the
-# rsync moved nothing, or a push that failed once could never be retried by
-# running the deploy again -- "Nothing changed" would swallow it every time.
+# Deliberately not an early exit: the push below has to run even when nothing
+# moved, so that deploying again retries a push that failed.
 if [ -z "$app_out$tools_out" ]; then
   echo "Nothing changed."
 fi
@@ -62,21 +55,14 @@ case $app_out in
     ;;
 esac
 
-# Push the timetable into Radicale, from inside the schedule container: the
-# host cannot reach radicale:5232 (the stack uses `expose`, not `publish`), but
-# anything on the `core` network can, which skips TLS, public DNS and Caddy.
-#
-# Unconditional, because it is cheap and idempotent, and a deploy is exactly
-# when you are paying attention if it has anything to say.
-#
-# The credentials come from /srv/docker/.env by way of the service definition,
-# the same as every other secret on that host; docker exec inherits the
-# container's environment, so nothing is passed or sourced here.
+# From inside the container because the host cannot reach radicale:5232 (the
+# stack uses `expose`, not `publish`), but anything on the `core` network can.
+# docker exec inherits the container's environment, which holds the
+# credentials from /srv/docker/.env. The feed is at /app/schedule.ics, where
+# push-dav.py looks by default.
 #
 # A failed push is not a failed deploy: the page is already live.
 if ! ssh "$host" "docker exec schedule \
-      python /tools/push-dav.py \
-        --ics /app/web/schedule.ics \
-        --url http://radicale:5232/ender/schedule/"; then
+      python /tools/push-dav.py --url http://radicale:5232/ender/schedule/"; then
   echo "Calendar push failed. The page is live; phone reminders are stale."
 fi

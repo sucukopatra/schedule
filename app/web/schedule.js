@@ -15,6 +15,7 @@
      note   dimmer second line, optional
      track  counts toward the meter of this name
      weeks  which week types it shows up in; omit for all of them
+     alarm  minutes of warning in the phone calendar, overriding `alarms`
 
    A week type can name the ISO weeks it applies to (isoWeeks, below), so trip
    and exam weeks arrive on their own instead of waiting to be remembered.
@@ -33,13 +34,14 @@ var SCHEDULE = {
 
   /* The term's first and last day, used only to generate schedule.ics — the
      page itself does not care. Both are inclusive, YYYY-MM-DD. */
-  termStart: '2026-09-14',
+  termStart: '2026-09-21',
   termEnd:   '2026-12-22',
 
   /* Minutes of warning in the calendar feed, by kind. A kind that is not
-     listed gets no alarm, which is why habit is absent: they are small and
-     daily, and a ping for every one of them is how a phone learns to be
-     ignored. */
+     listed gets no alarm, which is why habit is absent: a ping for every small
+     daily thing is how a phone learns to be ignored. A block's own `alarm`
+     wins over its kind, so Anki and Nicos Weg ping while Reading and Long
+     read stay quiet. */
   alarms: { class: 30, gym: 15, deep: 10, review: 10, trip: 60 },
 
   /* isoWeeks: the weeks this type takes over, as ISO week strings. The type is
@@ -76,8 +78,8 @@ var SCHEDULE = {
 
   blocks: [
     /* --- every week ------------------------------------------------------ */
-    { day: ['Mon','Tue','Wed','Thu','Fri'], at: '07:45-08:00', kind: 'habit', title: 'Anki',    note: 'Nouns with der/die/das', track: 'german' },
-    { day: ['Sat','Sun'],                   at: '09:00-09:15', kind: 'habit', title: 'Anki',    note: 'Nouns with der/die/das', track: 'german' },
+    { day: ['Mon','Tue','Wed','Thu','Fri'], at: '07:45-08:00', kind: 'habit', title: 'Anki',    note: 'Nouns with der/die/das', track: 'german', alarm: 10 },
+    { day: ['Sat','Sun'],                   at: '09:00-09:15', kind: 'habit', title: 'Anki',    note: 'Nouns with der/die/das', track: 'german', alarm: 10 },
     { day: '*',                             at: '22:30-23:00', kind: 'habit', title: 'Reading', note: 'Before bed',             track: 'reading' },
 
     /* --- Monday: longest day, so the evening stays light ----------------- */
@@ -85,7 +87,7 @@ var SCHEDULE = {
     { day: 'Mon', at: '11:00-13:00', kind: 'class', title: 'PHYS 101 lab', note: 'E2-101, 12:00 online' },
     { day: 'Mon', at: '14:00-17:00', kind: 'class', title: 'CMPE 100',     note: 'E1-102' },
     { day: 'Mon', at: '17:00-19:00', kind: 'class', title: 'CMPE 100 lab', note: 'E3-304' },
-    { day: 'Mon', at: '20:00-20:30', kind: 'habit', title: 'Nicos Weg',    note: 'Next lesson, in order', track: 'nicosweg' },
+    { day: 'Mon', at: '20:00-20:30', kind: 'habit', title: 'Nicos Weg',    note: 'Next lesson, in order', track: 'nicosweg', alarm: 10 },
 
     /* --- Tuesday --------------------------------------------------------- */
     { day: 'Tue', at: '09:00-12:00', kind: 'class', title: 'PHYS 101',     note: 'ÇSM-203, GAME 201 online at 10' },
@@ -108,7 +110,7 @@ var SCHEDULE = {
     { day: 'Thu', at: '14:00-16:00', kind: 'class', title: 'GAME 211 lab', note: 'E1-219' },
     { day: 'Thu', at: '16:00-18:00', kind: 'deep',  title: 'Deep session' },
     { day: 'Thu', at: '18:30-19:45', kind: 'gym',   title: 'Gym',          note: '5x5', track: 'gym' },
-    { day: 'Thu', at: '20:30-21:00', kind: 'habit', title: 'Nicos Weg',    note: 'Next lesson, in order', track: 'nicosweg' },
+    { day: 'Thu', at: '20:30-21:00', kind: 'habit', title: 'Nicos Weg',    note: 'Next lesson, in order', track: 'nicosweg', alarm: 10 },
 
     /* --- Friday: the long work day, done by 18:00 ------------------------ */
     { day: 'Fri', at: '08:15-09:45', kind: 'deep',  title: 'Deep session' },
@@ -120,7 +122,7 @@ var SCHEDULE = {
 
     /* --- Saturday -------------------------------------------------------- */
     { day: 'Sat', at: '10:00-11:15', kind: 'gym',    title: 'Gym',          note: '5x5', track: 'gym',                          weeks: ['normal','exam'] },
-    { day: 'Sat', at: '11:45-12:15', kind: 'habit',  title: 'Nicos Weg',    note: 'Next lesson, in order', track: 'nicosweg', weeks: ['normal','exam'] },
+    { day: 'Sat', at: '11:45-12:15', kind: 'habit',  title: 'Nicos Weg',    note: 'Next lesson, in order', track: 'nicosweg', weeks: ['normal','exam'], alarm: 10 },
     { day: 'Sat', at: '19:00-22:30', kind: 'anchor', title: 'Free evening', note: 'Nothing planned. Russian if German is on track', weeks: ['normal','exam'] },
     { day: 'Sat', at: '08:30-22:00', kind: 'trip',   title: 'Trip',         note: 'Monthly weekend out of İstanbul', weeks: ['trip'] },
 

@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-/* Generates app/web/schedule.ics from schedule.js, so the phone's own calendar
-   can do the reminding. A subscribed calendar is the one way to be told "gym
-   in 15 minutes" while the app is closed without running push infrastructure:
-   a page cannot wake itself, and the API that would have let it never shipped.
+/* Generates app/schedule.ics from schedule.js, so the phone's own calendar can
+   do the reminding: a page cannot wake itself while it is closed.
+   tools/push-dav.py pushes the result into Radicale at deploy time.
 
-     node tools/make-ics.js            # write app/web/schedule.ics
+     node tools/make-ics.js            # write app/schedule.ics
      node tools/make-ics.js --check    # exit 1 if the file is out of date
 
    Like the icons, the .ics is generated and committed rather than built on the
@@ -19,7 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { WEB, pad, loadSchedule, expand, isoWeek, typeForWeek } = require('./lib.js');
 
-const OUT = path.join(WEB, 'schedule.ics');
+const OUT = path.join(WEB, '..', 'schedule.ics');
 const BYDAY = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
 const SCHEDULE = loadSchedule();
 
@@ -58,10 +57,8 @@ function build() {
     /* No METHOD: it belongs on an invitation, and some clients treat a
        subscription carrying one as exactly that. No X-WR-TIMEZONE either,
        because these times are floating and any value there would be a lie. */
+    /* push-dav.py names the collection after this if it has to create it. */
     'X-WR-CALNAME:' + esc(SCHEDULE.term),
-    /* Ask subscribers to re-poll daily; both spellings, since clients differ. */
-    'REFRESH-INTERVAL;VALUE=DURATION:PT12H',
-    'X-PUBLISHED-TTL:PT12H',
   ];
 
   expand(SCHEDULE).forEach((b) => {
@@ -96,7 +93,7 @@ function build() {
     skipped.forEach((x) => {
       lines.push('EXDATE:' + ymd(x) + 'T' + from.replace(':', '') + '00');
     });
-    const warn = (SCHEDULE.alarms || {})[b.kind];
+    const warn = b.alarm || (SCHEDULE.alarms || {})[b.kind];
     if (warn) {
       lines.push('BEGIN:VALARM');
       lines.push('ACTION:DISPLAY');
@@ -116,8 +113,8 @@ function check() {
   const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : null;
   if (current === build()) return [true, '  ok   schedule.ics is up to date'];
   return [false, current === null
-    ? '  ERROR: app/web/schedule.ics does not exist -- run: node tools/make-ics.js'
-    : '  ERROR: app/web/schedule.ics is out of date -- run: node tools/make-ics.js'];
+    ? '  ERROR: app/schedule.ics does not exist -- run: node tools/make-ics.js'
+    : '  ERROR: app/schedule.ics is out of date -- run: node tools/make-ics.js'];
 }
 
 module.exports = { build, check };
@@ -132,5 +129,5 @@ if (require.main === module) {
   fs.writeFileSync(OUT, ics);
   const events = (ics.match(/BEGIN:VEVENT/g) || []).length;
   const alarms = (ics.match(/BEGIN:VALARM/g) || []).length;
-  console.log(`wrote app/web/schedule.ics: ${events} events, ${alarms} alarms, ${ics.length} bytes`);
+  console.log(`wrote app/schedule.ics: ${events} events, ${alarms} alarms, ${ics.length} bytes`);
 }

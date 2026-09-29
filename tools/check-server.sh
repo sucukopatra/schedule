@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # The server's HTTP contract, checked against a real instance on a throwaway
-# DATA_DIR. Every one of these is something that has gone wrong: a request that
-# got no reply at all, a path that reached outside web/, a stale write that
-# should have been refused.
+# DATA_DIR: every request gets a reply, nothing outside web/ is reachable, and
+# a stale write is refused.
 #
 #   tools/check-server.sh        # exits 1 on the first wrong answer
 set -uo pipefail
@@ -26,23 +25,22 @@ put()  { curl -s -o /dev/null -w '%{http_code}' -X PUT -H 'Content-Type: applica
            --max-time 10 -d "$1" "http://127.0.0.1:$PORT/api/state"; }
 
 echo "serving"
-for f in / /index.html /style.css /schedule.js /app.js /sw.js /manifest.webmanifest /icon.svg /icon-192.png /apple-touch-icon.png /schedule.ics /healthz; do
+for f in / /index.html /style.css /schedule.js /app.js /sw.js /manifest.webmanifest /icon.svg /icon-192.png /apple-touch-icon.png /healthz; do
   check "GET $f" 200 "$(code $f)"
 done
 ctype() { curl -s -o /dev/null -w '%{content_type}' --max-time 10 "http://127.0.0.1:$PORT$1"; }
-check "GET /schedule.ics is text/calendar" "text/calendar; charset=utf-8" "$(ctype /schedule.ics)"
 check "GET /icon-192.png claims no charset" "image/png" "$(ctype /icon-192.png)"
 
 echo "refusing"
 check "GET /api/state before any save"    404 "$(code /api/state)"
 check "GET /missing.css"                  404 "$(code /missing.css)"
 check "GET /server.py"                    404 "$(code /server.py)"
+check "GET /schedule.ics (pushed, not served)" 404 "$(code /schedule.ics)"
 check "GET /../server.py"                 404 "$(code /../server.py)"
 check "GET /%2e%2e%2fserver.py"           404 "$(code /%2e%2e%2fserver.py)"
 check "GET /sub/dir/app.js"               404 "$(code /sub/dir/app.js)"
 check "GET /.hidden.js"                   404 "$(code /.hidden.js)"
-# A name too long for the filesystem used to raise an uncaught OSError and the
-# connection closed with no HTTP reply at all.
+# A name too long for the filesystem gets a 404, not a dropped connection.
 check "GET /<400 chars>.js"               404 "$(code "/$(python3 -c 'print("a"*400)').js")"
 
 echo "state"
@@ -53,8 +51,7 @@ check "PUT not JSON"                      400 "$(put 'nonsense')"
 check "PUT a JSON array, not an object"   400 "$(put '[1,2,3]')"
 check "PUT empty body"                    413 "$(put '')"
 check "PUT over 64 KB"                    413 "$(put "$(python3 -c 'print("{\"a\":\"" + "x"*70000 + "\"}")')")"
-# A non-numeric Content-Length used to raise an uncaught ValueError, same
-# no-reply-at-all symptom as the long filename above.
+# A non-numeric Content-Length gets a 400, not a dropped connection.
 reply=$(printf 'PUT /api/state HTTP/1.1\r\nHost: x\r\nContent-Length: abc\r\n\r\n' \
   | timeout 5 python3 -c "
 import socket,sys

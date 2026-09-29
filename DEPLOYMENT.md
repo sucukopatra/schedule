@@ -43,6 +43,7 @@ Server layout today:
 /srv/docker/config/caddy/webpages/schedule/
 ├── app/
 │   ├── server.py
+│   ├── schedule.ics    # generated; pushed to Radicale, not served
 │   └── web/
 │       ├── index.html
 │       ├── style.css
@@ -50,7 +51,6 @@ Server layout today:
 │       ├── app.js
 │       ├── sw.js
 │       ├── manifest.webmanifest
-│       ├── schedule.ics
 │       ├── icon.svg
 │       ├── icon-192.png
 │       ├── icon-512.png
@@ -105,9 +105,8 @@ Edit them directly and reload.
 
 The page is installable and works offline: *Add to home screen* on the phone,
 or the install button in a desktop browser. It then opens without browser
-chrome, from the icon, and starts even when bmo is unreachable — which the
-localStorage fallback always supported in principle but could never actually
-reach, because without the network the HTML never loaded at all.
+chrome, from the icon, and starts even when bmo is unreachable, running on the
+localStorage fallback.
 
 - `manifest.webmanifest` — name, colours and icons. The name is deliberately
   generic (*Weekly timetable* / *Week*) so it does not go stale every semester
@@ -141,8 +140,9 @@ shipped past an origin trial. Real push would mean VAPID signing and payload
 encryption, neither of which is in the standard library, plus something on bmo
 deciding when to fire.
 
-So the phone's own calendar does the reminding instead. `schedule.ics` is a
-subscribable calendar generated from `schedule.js`:
+So the phone's own calendar does the reminding instead. `app/schedule.ics` is
+generated from `schedule.js` and pushed into Radicale (below), which the phone
+already syncs:
 
 ```bash
 node tools/make-ics.js           # regenerate after editing the timetable
@@ -154,7 +154,9 @@ but unlike the icons it goes stale every time the timetable changes, so
 `check-schedule.js` runs the same check and the deploy refuses a stale one.
 
 - Lead times come from `SCHEDULE.alarms`, keyed by kind. A kind that is not
-  listed gets no alarm, which is why `habit` is absent.
+  listed gets no alarm, which is why `habit` is absent. A block's own `alarm`
+  (minutes) wins over its kind: Anki and Nicos Weg have one, Reading and Long
+  read do not.
 - Times are **floating**: no `TZID`, no `VTIMEZONE`, no offsets. "09:00" means
   nine o'clock wherever the phone is, which is what a class timetable means and
   leaves no DST arithmetic to get wrong.
@@ -163,25 +165,14 @@ but unlike the icons it goes stale every time the timetable changes, so
   `isoWeeks` names your trip weeks the calendar follows. A block that applies
   to no week in the term is left out entirely — with no trip weeks declared,
   the five trip-only blocks produce no events.
-- `UID`s are the same stable ids the page uses, so re-subscribing updates
-  events rather than duplicating them.
-
-**Subscribing depends on who does the fetching**, and this is where it gets
-counter-intuitive. The site has no public DNS and is reachable only over the
-LAN or Tailscale:
-
-- **iOS** fetches subscribed calendars *from the phone*, so it works: Settings
-  → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar, then
-  `https://schedule.domatesis.com/schedule.ics`. The phone has to be on
-  Tailscale or the LAN when it refreshes.
-- **Google Calendar cannot do this.** "From URL" makes *Google's servers*
-  fetch, and they cannot reach a private host. It will fail, and the failure
-  looks like nothing happening.
-- **Android** has no subscribe-from-the-device support of its own. Either an
-  app that fetches locally, such as ICSx⁵, or the CalDAV route below.
+- `UID`s are the same stable ids the page uses, so a re-push updates events
+  rather than duplicating them.
+- The feed lives in `app/`, not `app/web/`, so the server does not serve it:
+  nothing subscribes to it by URL. (Google Calendar could not have anyway: its
+  servers do the fetching, and they cannot reach a private host.)
 
 Once events have synced, the alarms are local: they fire with the phone off the
-network entirely. Only picking up *changes* needs Tailscale.
+network entirely.
 
 ### The CalDAV route: pushing into Radicale
 
@@ -197,22 +188,17 @@ and leaves the fetching to the client. So the collection sits at zero items, and
 DAVx⁵ refuses it with *no compatible calendar app* because it wants to hand the
 URL off to ICSx⁵. Make the collection an ordinary **Calendar** and push to it:
 
-```bash
-python3 tools/push-dav.py             # after make-ics.js, after the rsync
-python3 tools/push-dav.py --dry-run   # report, change nothing
-```
-
-Once set up this is not run by hand, and not from the laptop. `tools/deploy.sh`
-runs it on bmo through the **schedule container that already exists** -- it is
-already on the `core` network and already mounts the feed, so no second service
-is needed:
+It is not run by hand, and not from the laptop. `tools/deploy.sh` runs it on bmo
+through the **schedule container that already exists** -- it is already on the
+`core` network and already mounts the feed at `/app/schedule.ics`, where the
+script looks by default, so no second service is needed:
 
 ```sh
 ssh bmo "docker exec schedule \
-  python /tools/push-dav.py \
-    --ics /app/web/schedule.ics \
-    --url http://radicale:5232/ender/schedule/"
+  python /tools/push-dav.py --url http://radicale:5232/ender/schedule/"
 ```
+
+Add `--dry-run` to that to report what would change without writing anything.
 
 This needs three lines added to the existing `schedule` service in
 `stacks/schedule.yml`, and the two keys in `/srv/docker/.env` beside
@@ -239,9 +225,7 @@ the same reason -- compose interpolates it otherwise.
   changes only when the timetable is deployed. Nothing polls and there is no
   service to keep alive. The cost is that a collection which drifts on its own
   -- an event deleted on the phone and synced up, or a restore from an older
-  backup -- stays wrong until the next deploy. Run `push-dav.py` by hand to fix
-  that; a `--watch` mode that healed it on a timer was written and then removed
-  as more machinery than the problem deserved (see `26f4739`).
+  backup -- stays wrong until the next deploy, so deploying again fixes it.
 - **Credentials live on bmo**, in `/srv/docker/.env` with every other secret on
   that host. `docker exec` inherits the container's environment, so the deploy
   passes nothing and sources nothing, and the password never appears in `ps` or
@@ -255,22 +239,21 @@ the same reason -- compose interpolates it otherwise.
   live, only the reminders are stale.
 
 The one-time setup is a `Calendar` collection at `/ender/schedule/`, the `.env`
-entry, and enabling the calendar in DAVx⁵ and Fossify. A `~/.netrc` on the
-laptop is needed only if you want to run the push by hand.
+entry, and enabling the calendar in DAVx⁵ and Fossify. The laptop needs no
+credentials at all.
 
 - One resource per event, named from the UID (`gym-Tue-18-30-schedule....ics`),
   so a re-run updates in place rather than duplicating.
 - **Deletion is scoped.** Anything in the collection missing from the feed is
   removed, but only after fetching it and confirming its UID ends
   `@schedule.domatesis.com`. An event added by hand survives, and pointing the
-  script at the wrong collection cannot quietly empty it. This is what a webcal
-  subscription would have given for free, and the reason moving a block does
-  not leave a ghost alarm behind.
-- Credentials come from `SCHEDULE_DAV_USER`/`SCHEDULE_DAV_PASS`, else `~/.netrc`
-  for the host, else a prompt. Never from the command line, which `ps` shows to
-  every process on the machine. `--url` or `SCHEDULE_DAV_URL` overrides the
-  collection.
-- The collection is created with `MKCALENDAR` if it is not there yet.
+  script at the wrong collection cannot quietly empty it. It is also why moving
+  a block does not leave a ghost alarm behind.
+- Credentials come from `SCHEDULE_DAV_USER`/`SCHEDULE_DAV_PASS` and nowhere
+  else: no prompt, no `~/.netrc`, never the command line (which `ps` shows to
+  every process on the machine). Without them it stops with an error.
+- The collection is created with `MKCALENDAR` if it is not there yet, named
+  after the feed's `X-WR-CALNAME` (the term).
 
 On the phone, **Fossify hides CalDAV calendars until you turn them on**: Settings
 → CalDAV sync, then tick the calendar. Reminders also need the *Alarms &
@@ -435,11 +418,11 @@ what is actually wrong.
 
 Nothing is built, locally or on the server. Deploy is `tools/deploy.sh`, which
 lives in this repo rather than in `~/.zshrc` so a reinstalled laptop needs only
-a clone. It runs `check-schedule.js` first and refuses to ship if that fails --
-quietly when it passes, since the notes it prints on a clean run are not deploy
-news. A stale `schedule.ics` is the case that earns the guard: it now reaches
-the phone as real reminders, so the symptom is an alarm at last term's time
-rather than a page that looks wrong, and nothing downstream would catch it.
+a clone. It runs all four checks first and refuses to ship if any fails --
+quietly when they pass, since the notes they print on a clean run are not
+deploy news. A stale `schedule.ics` is the case that earns the guard: it
+reaches the phone as real reminders, so the symptom is an alarm at the wrong
+time rather than a page that looks wrong, and nothing downstream would catch it.
 Then it rsyncs `app/`, which the container serves, and `tools/push-dav.py`,
 which the push at the end runs. The script itself is commented step by step;
 the points worth knowing without reading it:
@@ -447,7 +430,7 @@ the points worth knowing without reading it:
 - The rsync target is `app/` only, so `--delete` can never reach `data/`.
 - The calendar push runs on bmo, inside the `schedule` container, with the
   credentials from `/srv/docker/.env` (see *The CalDAV route* above). The
-  laptop needs no `~/.netrc` for it.
+  laptop needs no credentials for it.
 - The push runs **unconditionally**, including on a deploy that changed
   nothing. It is idempotent, so that costs a few seconds and heals a
   collection that drifted, and a push that failed once is retried by simply
@@ -522,8 +505,8 @@ workers are also disabled in private windows.
 ### Checks
 
 Four checks in `tools/`, no dependencies beyond `node`, `python3` and `curl`.
-They live outside `app/`, so they are never deployed. Run them before a deploy;
-each exits non-zero on a failure.
+They live outside `app/`, so they are never deployed. `tools/deploy.sh` runs all
+four and refuses to ship if any fails; each exits non-zero on a failure.
 
 ```bash
 node tools/check-schedule.js   # invariants, and that schedule.ics is current

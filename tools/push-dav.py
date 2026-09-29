@@ -3,21 +3,20 @@
 
 This is how reminders reach the phone: schedule.js -> make-ics.js ->
 schedule.ics -> here -> Radicale -> DAVx5 -> Fossify, where the alarms are
-local and fire with the phone off the network. The whole chain has been walked
-once, ending at a gym block reading 19:30 on the phone, which is what says the
-floating times survived the trip.
+local and fire with the phone off the network.
 
 Run --dry-run when pointing this anywhere new. Aimed at the wrong collection it
 deletes nothing, but it does add every event in the feed, to be cleared out by hand.
 
-    python3 tools/push-dav.py                 # push, using $SCHEDULE_DAV_* or ~/.netrc
+    python3 tools/push-dav.py                 # push
     python3 tools/push-dav.py --dry-run       # say what would change, touch nothing
     python3 tools/push-dav.py --url URL       # a collection other than the default
 
-On bmo this is run by tools/deploy.sh through `docker exec` on the schedule
-container, which is already on the `core` network and already mounts the feed.
+Credentials come from $SCHEDULE_DAV_USER and $SCHEDULE_DAV_PASS and nowhere
+else. tools/deploy.sh runs this on bmo through `docker exec` on the schedule
+container, which carries both, is on the `core` network, and mounts the feed.
 The .ics only changes when the timetable is deployed, so a push at deploy time
-is all there is to do -- nothing polls, and there is no service to maintain.
+is all there is to do; to push again, deploy again.
 
 Radicale's `webcal` collection type does NOT mirror a feed -- it stores the
 source URL as CS:source and expects the *client* to fetch it, which is why such
@@ -36,8 +35,6 @@ Stdlib only: no pip, matching the rest of tools/.
 
 import argparse
 import base64
-import getpass
-import netrc
 import os
 import re
 import sys
@@ -46,12 +43,12 @@ import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from urllib.parse import unquote, urljoin, urlparse
+from urllib.parse import unquote, urljoin
 from xml.sax.saxutils import escape
 
 DEFAULT_URL = 'https://dav.domatesis.com/ender/schedule/'
 UID_SUFFIX = '@schedule.domatesis.com'
-ICS = Path(__file__).resolve().parent.parent / 'app' / 'web' / 'schedule.ics'
+ICS = Path(__file__).resolve().parent.parent / 'app' / 'schedule.ics'
 DAV = '{DAV:}'
 
 
@@ -87,8 +84,7 @@ def split_events(text):
 
     # Calendar-level properties belong to the collection, not repeated in
     # every event; the collection's displayname is what clients show.
-    head = [l for l in head if not l.startswith(('X-WR-CALNAME', 'REFRESH-INTERVAL',
-                                                 'X-PUBLISHED-TTL'))]
+    head = [l for l in head if not l.startswith('X-WR-CALNAME')]
 
     out, cur = {}, None
     for line in lines:
@@ -191,27 +187,14 @@ class Dav:
 
 # --- credentials ------------------------------------------------------------
 
-def credentials(url):
-    """Env first, then ~/.netrc, then prompt. Never from argv -- that is
-    visible in `ps` to every process on the machine."""
+def credentials():
+    """From the environment only. Never from argv, which `ps` shows to every
+    process on the machine."""
     user = os.environ.get('SCHEDULE_DAV_USER')
     password = os.environ.get('SCHEDULE_DAV_PASS')
-    if user and password:
-        return user, password, 'environment'
-
-    host = urlparse(url).hostname
-    try:
-        auth = netrc.netrc().authenticators(host)
-        if auth and auth[0] and auth[2]:
-            return auth[0], auth[2], '~/.netrc'
-    except (FileNotFoundError, netrc.NetrcParseError):
-        pass
-
-    if not sys.stdin.isatty():
-        die('no credentials: set SCHEDULE_DAV_USER and SCHEDULE_DAV_PASS, '
-            f'or add a ~/.netrc entry for {host}')
-    user = user or input(f'{host} username: ')
-    return user, getpass.getpass(f'{host} password: '), 'prompt'
+    if not (user and password):
+        die('no credentials: set SCHEDULE_DAV_USER and SCHEDULE_DAV_PASS')
+    return user, password
 
 
 # --- main -------------------------------------------------------------------
@@ -265,25 +248,19 @@ def sync_once(dav, ics):
 def main():
     ap = argparse.ArgumentParser(description='Push schedule.ics into a CalDAV collection.')
     ap.add_argument('--url', default=os.environ.get('SCHEDULE_DAV_URL', DEFAULT_URL))
-    ap.add_argument('--ics', default=os.environ.get('SCHEDULE_ICS'), metavar='PATH',
-                    help='the feed to push (default: app/web/schedule.ics beside this script)')
+    ap.add_argument('--ics', default=ICS, type=Path, metavar='PATH',
+                    help='the feed to push (default: app/schedule.ics beside this script)')
     ap.add_argument('--dry-run', action='store_true', help='report, change nothing')
     args = ap.parse_args()
 
-    ics = Path(args.ics).resolve() if args.ics else ICS
     try:
-        user, password, source = credentials(args.url)
-    except DavError as e:
-        print(f'  ERROR: {e}', file=sys.stderr)
-        return 1
-    auth = base64.b64encode(f'{user}:{password}'.encode('utf-8')).decode('ascii')
-    dav = Dav(args.url, auth, args.dry_run)
-    say(f'{dav.url}  (as {user}, credentials from {source})')
-    if args.dry_run:
-        say('dry run: nothing will be written')
-
-    try:
-        say(sync_once(dav, ics))
+        user, password = credentials()
+        auth = base64.b64encode(f'{user}:{password}'.encode('utf-8')).decode('ascii')
+        dav = Dav(args.url, auth, args.dry_run)
+        say(f'{dav.url}  (as {user})')
+        if args.dry_run:
+            say('dry run: nothing will be written')
+        say(sync_once(dav, args.ics))
     except DavError as e:
         print(f'  ERROR: {e}', file=sys.stderr)
         return 1

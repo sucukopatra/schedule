@@ -32,6 +32,7 @@ const valid = SCHEDULE.blocks.filter((b) => {
   if (KINDS.indexOf(b.kind) < 0) err('unknown kind:', b.kind, '-', b.title);
   (b.weeks || []).forEach((w) => { if (!SCHEDULE.weeks[w]) err('unknown week type:', w, '-', b.title); });
   daysOf(b).forEach((name) => { if (DAYS.indexOf(name) < 0) err('unknown day:', name, '-', b.title); });
+  if ('alarm' in b && !(b.alarm > 0)) err('alarm is not a positive number of minutes:', JSON.stringify(b.alarm), '-', b.title);
   return true;
 });
 const B = expand({ ...SCHEDULE, blocks: valid });

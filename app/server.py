@@ -5,7 +5,8 @@ Serves everything in web/ and stores the page's state as one JSON file.
   PUT  /api/state  -> replace state; rejected with 409 (and the current state)
                       if the incoming savedAt is older than what's stored
   GET  /healthz    -> "ok"
-Standard library only. Put auth in front of it (Caddy basic_auth).
+Standard library only. No auth: it is reachable only over the LAN and
+Tailscale, by design (see DEPLOYMENT.md).
 """
 import json
 import os
@@ -24,7 +25,6 @@ TYPES = {
     ".js": "text/javascript",
     ".json": "application/json",
     ".webmanifest": "application/manifest+json",
-    ".ics": "text/calendar",
     ".svg": "image/svg+xml",
     ".png": "image/png",
     ".ico": "image/x-icon",

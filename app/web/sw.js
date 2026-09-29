@@ -1,7 +1,5 @@
-/* Service worker: lets the page start from the home screen and keep working
-   when bmo is out of reach. The localStorage fallback in app.js has always
-   existed but could never be reached, because without the network the HTML
-   never loaded in the first place.
+/* Service worker: lets the page start from the home screen and keep working,
+   on the localStorage fallback, when bmo is out of reach.
 
    Page files are network-first, not cache-first, so "edit a file on bmo and
    reload" keeps working exactly as before; the cache is only what you get when

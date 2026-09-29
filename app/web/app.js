@@ -209,9 +209,9 @@
         if (needsRollSave) { needsRollSave = false; save(); return; }
         /* Anything ticked while the server was unreachable is still only on
            this device: save() skips the push when serverOk is false, and
-           adopt() has just turned down the server's older copy. Nothing else
-           ever retries, so without this the work sits here under a status line
-           claiming "Synced" until another device saves and quietly wins. */
+           adopt() has just turned down the server's older copy. This is the
+           only retry, so without it the work would sit here under "Synced"
+           until another device saved and quietly won. */
         if (state.savedAt > (s ? Number(s.savedAt) || 0 : 0)) { push(); return; }
         setStatus('Synced');
       })
@@ -400,15 +400,14 @@
 
   /* ---------- Today view ---------- */
 
-  /* peek: the read-only look at tomorrow, where nothing is ticked, nothing is
-     past, and an open session is not an invitation to tap. */
-  function rowHTML(b, now, peek) {
+  /* peek: the read-only look at tomorrow, where nothing is ticked and an open
+     session is not an invitation to tap. */
+  function rowHTML(b, peek) {
     const f = face(b);
     const tickable = b.tickable && !peek;
     const done = tickable && !!state.done[b.id];
-    const past = !peek && b.e <= now;
     const note = peek && b.kind === 'deep' && !state.slots[b.id] ? 'Not chosen yet' : f.note;
-    const cls = ['row', 'k-' + b.kind, done ? 'is-done' : '', past && !done ? 'past' : ''].join(' ');
+    const cls = ['row', 'k-' + b.kind, done ? 'is-done' : ''].join(' ');
     const style = f.color ? `--c:${f.color}` : '';
     const inner = `<span class="rtime">${hhmm(b.s)}</span>
       <span class="rbody"><span class="rtitle">${esc(f.title)}</span>${note ? `<span class="rnote">${esc(note)}</span>` : ''}</span>
@@ -468,7 +467,7 @@
     if (!blocks.length) return '';
 
     return `<section class="rows tomorrow"><h2>Tomorrow · ${esc(LONG[di])}</h2>`
-      + blocks.map((b) => rowHTML(b, 0, true)).join('') + '</section>';
+      + blocks.map((b) => rowHTML(b, true)).join('') + '</section>';
   }
 
   function todayHTML() {
@@ -477,8 +476,7 @@
     const current = currentBlock(today, now);
     /* Every block lands in exactly one of these. A block that has started but
        did not win the Now card -- a trip running under everything else -- is
-       still running, and listing it as upcoming showed a start time that had
-       already passed. */
+       still running, so it goes under "Also on now", not "Still to come". */
     const running = today.filter((b) => b.s <= now && b.e > now && b !== current);
     const later = today.filter((b) => b.s > now);
     const earlier = today.filter((b) => b.e <= now);
@@ -486,7 +484,7 @@
     let h = nowCardHTML(today, now, current);
     [['Also on now', running, 'rows'], ['Still to come', later, 'rows'], ['Earlier today', earlier, 'rows earlier']]
       .forEach(([title, list, cls]) => {
-        if (list.length) h += `<section class="${cls}"><h2>${title}</h2>` + list.map((b) => rowHTML(b, now)).join('') + '</section>';
+        if (list.length) h += `<section class="${cls}"><h2>${title}</h2>` + list.map((b) => rowHTML(b)).join('') + '</section>';
       });
     if (!today.length) h += '<section class="rows"><p class="empty">Nothing scheduled today.</p></section>';
     return h + tomorrowHTML() + metersHTML() + planHTML() + historyHTML();

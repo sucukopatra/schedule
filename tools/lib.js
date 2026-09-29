@@ -39,7 +39,7 @@ function expand(SCHEDULE) {
       out.push({
         d, day, from, to, s: mins(from), e: mins(to),
         kind: b.kind, title: b.title, note: b.note || '', track: b.track || '',
-        weeks: b.weeks || types, tickable: TICKABLE.indexOf(b.kind) >= 0,
+        weeks: b.weeks || types, tickable: TICKABLE.indexOf(b.kind) >= 0, alarm: b.alarm,
         id: b.kind + '-' + day + '-' + from,
       });
     });
