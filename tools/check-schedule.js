@@ -11,7 +11,7 @@
    trips are meant to overlap, and a tickable block with no track is meant to
    be tickable without counting. */
 'use strict';
-const { DAYS, TICKABLE, mins, hhmm, loadSchedule, daysOf, expand, isoWeek } = require('./lib.js');
+const { DAYS, TICKABLE, mins, hhmm, loadSchedule, daysOf, expand, runs, isoWeek, typeForWeek } = require('./lib.js');
 
 const SCHEDULE = loadSchedule(process.argv[2]);
 const KINDS = TICKABLE.concat(['class', 'anchor', 'trip', 'light']);
@@ -25,6 +25,20 @@ const notes = [];
 const err = (...a) => errors.push(a.join(' '));
 const note = (...a) => notes.push(a.join(' '));
 
+const ISO_WEEK = /^\d{4}-W\d{2}$/;
+const isDate = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(Date.parse(d));
+
+/* One day from every ISO week the term touches, oldest first. A block's
+   isoWeeks are checked against these, and the page is driven through each. */
+const TERM_WEEKS = new Map();
+if (isDate(SCHEDULE.termStart) && isDate(SCHEDULE.termEnd)) {
+  const [y, m, d] = SCHEDULE.termStart.split('-').map(Number);
+  const [ey, em, ed] = SCHEDULE.termEnd.split('-').map(Number);
+  for (const day = new Date(y, m - 1, d, 8); day <= new Date(ey, em - 1, ed, 8); day.setDate(day.getDate() + 1)) {
+    if (!TERM_WEEKS.has(isoWeek(day))) TERM_WEEKS.set(isoWeek(day), new Date(day));
+  }
+}
+
 /* A block with an unreadable "at" is reported and left out of the expansion,
    so the rest can still be checked. */
 const valid = SCHEDULE.blocks.filter((b) => {
@@ -33,6 +47,16 @@ const valid = SCHEDULE.blocks.filter((b) => {
   (b.weeks || []).forEach((w) => { if (!SCHEDULE.weeks[w]) err('unknown week type:', w, '-', b.title); });
   daysOf(b).forEach((name) => { if (DAYS.indexOf(name) < 0) err('unknown day:', name, '-', b.title); });
   if ('alarm' in b && !(b.alarm > 0)) err('alarm is not a positive number of minutes:', JSON.stringify(b.alarm), '-', b.title);
+  /* A week typed wrong is a lab that silently never shows up, so a week the
+     term does not reach is an error rather than a note. */
+  if ('isoWeeks' in b) {
+    if (!Array.isArray(b.isoWeeks)) { err('isoWeeks is not a list -', b.title); return false; }
+    if (!b.isoWeeks.length) err('isoWeeks is empty, so it never happens -', b.title);
+    b.isoWeeks.forEach((w) => {
+      if (typeof w !== 'string' || !ISO_WEEK.test(w)) err(`isoWeeks: ${JSON.stringify(w)} is not an ISO week like 2026-W46 -`, b.title);
+      else if (TERM_WEEKS.size && !TERM_WEEKS.has(w)) err(`isoWeeks: ${w} is outside the term -`, b.title);
+    });
+  }
   return true;
 });
 const B = expand({ ...SCHEDULE, blocks: valid });
@@ -57,7 +81,7 @@ WEEK_TYPES.forEach((t) => {
   if (weeks === undefined) return;
   if (!Array.isArray(weeks)) return err(`${t}.isoWeeks is not a list`);
   weeks.forEach((w) => {
-    if (typeof w !== 'string' || !/^\d{4}-W\d{2}$/.test(w)) return err(`${t}.isoWeeks: ${JSON.stringify(w)} is not an ISO week like 2026-W46`);
+    if (typeof w !== 'string' || !ISO_WEEK.test(w)) return err(`${t}.isoWeeks: ${JSON.stringify(w)} is not an ISO week like 2026-W46`);
     if (claimed[w]) err(`${w} is claimed by both ${claimed[w]} and ${t}`);
     claimed[w] = t;
   });
@@ -107,7 +131,6 @@ B.forEach((b) => {
    full of wrong reminders. */
 const start = SCHEDULE.termStart;
 const end = SCHEDULE.termEnd;
-const isDate = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && !isNaN(Date.parse(d));
 if (!isDate(start)) err('termStart is not a YYYY-MM-DD date:', JSON.stringify(start));
 if (!isDate(end)) err('termEnd is not a YYYY-MM-DD date:', JSON.stringify(end));
 if (isDate(start) && isDate(end)) {
@@ -133,19 +156,33 @@ if (!icsOk) process.exit(1);
 
 /* app.js expands the blocks itself, since the page has no build step to share
    lib.js with. Ticks are stored under those ids, so make sure it still arrives
-   at the same ones: the week grid puts a data-id on every tickable block. */
+   at the same ones: the week grid puts a data-id on every tickable block.
+   Then walk the term a week at a time and count what the grid draws, which is
+   what catches the two disagreeing about a block's isoWeeks. */
 (async () => {
   const drive = require('./harness.js');
   const bad = [];
+  const thisWeek = isoWeek(new Date());
   for (const t of WEEK_TYPES) {
-    const r = await drive({ view: 'week', serverState: { v: 3, week: isoWeek(new Date()), type: t, savedAt: 1 } });
+    const r = await drive({ view: 'week', serverState: { v: 3, week: thisWeek, type: t, savedAt: 1 } });
     const got = [...r.html.matchAll(/data-id="([^"]+)"/g)].map((m) => m[1]).sort();
-    const want = B.filter((b) => b.tickable && b.weeks.indexOf(t) >= 0).map((b) => b.id).sort();
+    const want = B.filter((b) => b.tickable && runs(b, t, thisWeek)).map((b) => b.id).sort();
     if (got.join() !== want.join()) {
       bad.push(`${t}: app.js only ${got.filter((x) => want.indexOf(x) < 0).join(', ') || '-'}; lib.js only ${want.filter((x) => got.indexOf(x) < 0).join(', ') || '-'}`);
     }
   }
   bad.forEach((m) => console.log('  ERROR: block ids differ in', m));
   if (!bad.length) console.log('  ok   app.js and tools/lib.js agree on block ids');
-  process.exit(bad.length ? 1 : 0);
+
+  const off = [];
+  for (const [week, day] of TERM_WEEKS) {
+    const t = typeForWeek(SCHEDULE, week);
+    const r = await drive({ view: 'week', now: day.getTime(), serverState: { v: 3, week, type: t, savedAt: 1 } });
+    const got = (r.html.match(/class="blk /g) || []).length;
+    const want = B.filter((b) => runs(b, t, week)).length;
+    if (got !== want) off.push(`${week}: app.js draws ${got} blocks, lib.js expects ${want}`);
+  }
+  off.forEach((m) => console.log('  ERROR:', m));
+  if (!off.length) console.log(`  ok   app.js and tools/lib.js agree on every week of the term (${TERM_WEEKS.size})`);
+  process.exit(bad.length || off.length ? 1 : 0);
 })();

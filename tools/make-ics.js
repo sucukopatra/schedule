@@ -16,7 +16,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { WEB, pad, loadSchedule, expand, isoWeek, typeForWeek } = require('./lib.js');
+const { WEB, pad, loadSchedule, expand, runs, isoWeek, typeForWeek } = require('./lib.js');
 
 const OUT = path.join(WEB, '..', 'schedule.ics');
 const BYDAY = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
@@ -66,13 +66,14 @@ function build() {
 
     /* Every date in the term falling on this weekday, split into the ones
        this block applies to and the ones it does not. A block that applies
-       to every week type can never be excluded. */
+       to every week type and names no isoWeeks can never be excluded. */
     const on = [];
     const off = [];
     const d = new Date(start);
     while (d.getDay() !== ((di + 1) % 7)) d.setDate(d.getDate() + 1);
     for (; d <= end; d.setDate(d.getDate() + 7)) {
-      (b.weeks.indexOf(typeForWeek(SCHEDULE, isoWeek(d))) >= 0 ? on : off).push(new Date(d));
+      const week = isoWeek(d);
+      (runs(b, typeForWeek(SCHEDULE, week), week) ? on : off).push(new Date(d));
     }
     if (!on.length) return;
 

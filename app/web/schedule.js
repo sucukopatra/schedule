@@ -15,6 +15,9 @@
      note   dimmer second line, optional
      track  counts toward the meter of this name
      weeks  which week types it shows up in; omit for all of them
+     isoWeeks  the calendar weeks it happens in, as ISO week strings like
+            '2026-W42'; omit for every week. For a lab that meets on a list
+            of dates rather than weekly. `weeks` still applies on top.
      alarm  minutes of warning in the phone calendar, overriding `alarms`
 
    A week type can name the ISO weeks it applies to (isoWeeks, below), so trip
@@ -84,7 +87,9 @@ var SCHEDULE = {
 
     /* --- Monday: longest day, so the evening stays light ----------------- */
     { day: 'Mon', at: '09:00-11:00', kind: 'class', title: 'GAME 207',     note: 'E2-210' },
-    { day: 'Mon', at: '11:00-13:00', kind: 'class', title: 'PHYS 101 lab', note: 'E2-101, 12:00 online' },
+    /* Three experiments: Mon 12 Oct, 26 Oct and 16 Nov. */
+    { day: 'Mon', at: '11:00-13:00', kind: 'class', title: 'PHYS 101 lab', note: 'E2-101, 12:00 online',
+      isoWeeks: ['2026-W42', '2026-W44', '2026-W47'] },
     { day: 'Mon', at: '14:00-17:00', kind: 'class', title: 'CMPE 100',     note: 'E1-102' },
     { day: 'Mon', at: '17:00-19:00', kind: 'class', title: 'CMPE 100 lab', note: 'E3-304' },
     { day: 'Mon', at: '20:00-20:30', kind: 'habit', title: 'Nicos Weg',    note: 'Next lesson, in order', track: 'nicosweg', alarm: 10 },
@@ -92,7 +97,10 @@ var SCHEDULE = {
     /* --- Tuesday --------------------------------------------------------- */
     { day: 'Tue', at: '09:00-12:00', kind: 'class', title: 'PHYS 101',     note: 'ÇSM-203, GAME 201 online at 10' },
     { day: 'Tue', at: '12:00-14:00', kind: 'class', title: 'GAME 201 lab', note: 'E1-219' },
-    { day: 'Tue', at: '14:00-16:00', kind: 'class', title: 'CHEM 110 lab', note: 'ÇSM-305' },
+    /* Group A: safety 29 Sep, labs 1–4 on 6 Oct, 20 Oct, 10 Nov and 24 Nov,
+       recitation 8 Dec. Group B has the weeks in between. */
+    { day: 'Tue', at: '14:00-16:00', kind: 'class', title: 'CHEM 110 lab', note: 'ÇSM-305',
+      isoWeeks: ['2026-W40', '2026-W41', '2026-W43', '2026-W46', '2026-W48', '2026-W50'] },
     { day: 'Tue', at: '16:00-18:00', kind: 'deep',  title: 'Deep session' },
     { day: 'Tue', at: '18:30-19:45', kind: 'gym',   title: 'Gym',          note: '5x5', track: 'gym' },
 

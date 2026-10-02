@@ -60,6 +60,7 @@
         note: b.note || '',
         track: b.track || '',
         weeks: b.weeks || WEEK_TYPES,
+        isoWeeks: b.isoWeeks || null,
         tickable: TICKABLE.indexOf(b.kind) >= 0,
         id: b.kind + '-' + name + '-' + from
       });
@@ -70,8 +71,11 @@
   const BY_ID = {};
   BLOCKS.forEach((b) => { BY_ID[b.id] = b; });
 
-  const inWeek = (type) => BLOCKS.filter((b) => b.weeks.indexOf(type) >= 0);
-  const forWeek = () => inWeek(state.type);
+  /* A block runs in a week if the week's type includes it and, when it names
+     its own isoWeeks, the week is one of them. */
+  const inWeek = (type, week) => BLOCKS.filter((b) => b.weeks.indexOf(type) >= 0
+    && (!b.isoWeeks || b.isoWeeks.indexOf(week) >= 0));
+  const forWeek = () => inWeek(state.type, state.week);
 
   /* Every meter, in page order: one per category, gym, then the habit meters.
      Categories and gym are judged against the week type's target. A habit
@@ -261,7 +265,7 @@
     s = s || state;
     const c = {};
     METERS.forEach((m) => { c[m.key] = { planned: 0, done: 0 }; });
-    inWeek(s.type).forEach((b) => {
+    inWeek(s.type, s.week).forEach((b) => {
       const key = b.kind === 'deep' ? s.slots[b.id] : b.track;
       if (!key || !c[key]) return;
       c[key].planned++;
@@ -462,8 +466,9 @@
     const di = (dayIndex(new Date()) + 1) % 7;
     /* Sunday's tomorrow is next week's Monday, and a week always starts as
        whatever the calendar says, which is normal unless a type claims it. */
-    const type = di === 0 ? typeForWeek(isoWeek(new Date(Date.now() + 86400000))) : state.type;
-    const blocks = inWeek(type).filter((b) => b.d === di);
+    const week = di === 0 ? isoWeek(new Date(Date.now() + 86400000)) : state.week;
+    const type = di === 0 ? typeForWeek(week) : state.type;
+    const blocks = inWeek(type, week).filter((b) => b.d === di);
     if (!blocks.length) return '';
 
     return `<section class="rows tomorrow"><h2>Tomorrow · ${esc(LONG[di])}</h2>`

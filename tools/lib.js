@@ -39,7 +39,7 @@ function expand(SCHEDULE) {
       out.push({
         d, day, from, to, s: mins(from), e: mins(to),
         kind: b.kind, title: b.title, note: b.note || '', track: b.track || '',
-        weeks: b.weeks || types, tickable: TICKABLE.indexOf(b.kind) >= 0, alarm: b.alarm,
+        weeks: b.weeks || types, isoWeeks: b.isoWeeks || null, tickable: TICKABLE.indexOf(b.kind) >= 0, alarm: b.alarm,
         id: b.kind + '-' + day + '-' + from,
       });
     });
@@ -54,6 +54,10 @@ function isoWeek(d) {
   return t.getUTCFullYear() + '-W' + pad(Math.ceil(((t - jan1) / 86400000 + 1) / 7));
 }
 
+/* The same rule the page uses: the week's type has to include the block, and
+   a block that names its own isoWeeks only happens in those. */
+const runs = (b, type, week) => b.weeks.indexOf(type) >= 0 && (!b.isoWeeks || b.isoWeeks.indexOf(week) >= 0);
+
 /* The same rule the page uses: a week no type claims is normal. */
 function typeForWeek(SCHEDULE, week) {
   let picked = 'normal';
@@ -64,4 +68,4 @@ function typeForWeek(SCHEDULE, week) {
   return picked;
 }
 
-module.exports = { DAYS, TICKABLE, WEB, pad, mins, hhmm, loadSchedule, daysOf, expand, isoWeek, typeForWeek };
+module.exports = { DAYS, TICKABLE, WEB, pad, mins, hhmm, loadSchedule, daysOf, expand, runs, isoWeek, typeForWeek };

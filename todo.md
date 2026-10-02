@@ -11,24 +11,11 @@ Open items only. Finished work lives in git history.
       container, and the old `app/web/schedule.ics` on bmo is removed by the
       rsync.
 
-## Waiting: PHYS 101 lab and CHEM 110 lab
+## Labs
 
-**Don't touch either for now.** Both will probably run less than weekly, in a
-"bit weird" pattern, and neither pattern is decided yet. They stay exactly as
-they are, weekly, until it is: PHYS 101 lab Mon 11:00–13:00, CHEM 110 lab
-Tue 14:00–16:00.
-
-- [ ] **Waiting:** the actual pattern for each lab, whether that's odd or even
-      weeks, a start date, or an irregular list of dates.
-- [ ] Then build it once for both. Right now a block can only be limited by
-      week *type* (`weeks`), not by calendar week, so this needs a new field.
-      Recommendation: an `isoWeeks` list on the block itself, the same shape
-      the week types already use. That covers a strict alternation and an
-      irregular pattern alike, so a weird pattern needs no extra code.
-      Touches `app.js` (`forWeek` and the grid filter), `tools/lib.js`
-      (`expand`), `check-schedule.js` (validate the list) and `make-ics.js`,
-      which writes one weekly `RRULE` per block and would need `INTERVAL=2` or
-      one event per date.
+- [ ] CHEM 110 lab includes Tue 8 Dec (W50), the "Recitation" week on the lab
+      schedule. Drop `2026-W50` from its `isoWeeks` if that turns out not to
+      be in the lab slot.
 
 ## Schedule B, still settling
 
